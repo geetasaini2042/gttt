@@ -92,7 +92,7 @@ def run_flask():
     flask_app.run(host="0.0.0.0", port=5000)
 
 def run_bot():
-    #save_mongodb_data_to_file
+    save_mongodb_data_to_file
     app.run()
     print("Stopped\n")
     
