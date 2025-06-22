@@ -13,9 +13,7 @@ import json
 from pymongo import MongoClient
 from flask import Flask, request, jsonify
 # MongoDB Setup
-client = MongoClient("mongodb+srv://pankajsainikishanpura02:SHivxQzJdLrvbA9M@cluster0.tftxnvm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
-db = client["bot_database"]
-collection = db["bot_data_collection"]
+
 
 # File Path
 BOTES_DATA_FILE = "/opt/render/project/src/botes_data.json"
@@ -38,19 +36,22 @@ DEFAULT_JSON = {
         "items": []
     }
 }
-from flask import Flask
+
 flask_app = Flask(__name__)
 
 @flask_app.route("/upload-data", methods=["GET", "POST"])
 def handle_data():
     # File check and creation if not exists
-    if not os.path.exists(JSON_FILE_PATH):
-        with open(JSON_FILE_PATH, "w") as f:
+    client = MongoClient("mongodb+srv://pankajsainikishanpura02:SHivxQzJdLrvbA9M@cluster0.tftxnvm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+    db = client["bot_database"]
+    collection = db["bot_data_collection"]
+    if not os.path.exists(BOTES_DATA_FILE):
+        with open(BOTES_DATA_FILE, "w") as f:
             json.dump(DEFAULT_JSON, f, indent=2)
 
     # Load data from file
     try:
-        with open(JSON_FILE_PATH, "r") as f:
+        with open(BOTES_DATA_FILE, "r") as f:
             file_data = json.load(f)
     except Exception as e:
         return jsonify({"status": "error", "message": "Failed to read local JSON", "error": str(e)}), 500
@@ -91,7 +92,7 @@ def run_flask():
     flask_app.run(host="0.0.0.0", port=5000)
 
 def run_bot():
-    save_mongodb_data_to_file
+    #save_mongodb_data_to_file
     app.run()
     print("Stopped\n")
     
