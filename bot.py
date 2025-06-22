@@ -5,7 +5,6 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 import callback_handler 
 import threading
 from script import app, run_flask, run_bot
-# Define Admin IDs
 ADMINS = [6150091802, 2525267728]
 data_file = "/storage/emulated/0/BotBuilder/PYTHON/bot_data.json"
 
@@ -148,10 +147,10 @@ async def get_root_inline_keyboard(user_id: int):
 @app.on_message(filters.command("start") & filters.private)
 async def start_handler(client, message: Message):
     user_id = message.from_user.id
-    save_user(user_id)
+    await save_user(user_id)
 
     welcome_text = "👋 **Welcome to PDF Hub!**\n\nयहाँ से आप अपनी ज़रूरत की PDF फाइल्स पा सकते हैं। नीचे से फ़ोल्डर या फाइल चुनें:"
-    markup = get_root_inline_keyboard(user_id)
+    markup = await get_root_inline_keyboard(user_id)
 
     await message.reply_text(welcome_text, reply_markup=markup)
 
