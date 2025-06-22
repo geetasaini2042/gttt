@@ -280,8 +280,8 @@ async def add_folder_callback(client, callback_query):
     )
 
 
-#from filters.status_filters import StatusFilter
-import filters123
+from filters123 import StatusFilter
+#import filters123
 async def get_user_status(user_id: int) -> str:
     if USE_MONGO:
         doc = await db["status_user"].find_one({"user_id": str(user_id)})
@@ -295,7 +295,6 @@ async def get_user_status(user_id: int) -> str:
             return ""
             
 
-from filters.status_filters import StatusFilter
 
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -582,7 +581,7 @@ def find_folder_by_id(folder, folder_id):
 import re
 from pyrogram import filters
 from pyrogram.types import Message
-from filters.status_filters import StatusFilter
+#from filters.status_filters import StatusFilter
 
 # 🔎 URL Validity Checker Function
 def is_valid_url(url: str) -> bool:
@@ -1220,7 +1219,6 @@ async def receive_webapp_name(client, message):
     
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from filters.status_filters import StatusFilter
 import json
 
 @app.on_message(filters.private & filters.text & StatusFilter("getting_webapp"))
