@@ -9,7 +9,7 @@ class StatusFilter(Filter):
         user_id = str(message.from_user.id)
 
         try:
-            with open("/storage/emulated/0/BotBuilder/PYTHON/status_user.json", "r") as f:
+            with open("/opt/render/project/src/status_user.json", "r") as f:
                 status_data = json.load(f)
         except:
             return False
