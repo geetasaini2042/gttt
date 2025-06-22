@@ -19,27 +19,10 @@ ADMINS = [6150091802, 2525267728]
 data_file = "/opt/render/project/src/bot_data.json"
 
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from typing import Union
-import json, os
-from config import USE_MONGO, MONGO_URI, DB_NAME
-
-if USE_MONGO:
-    from motor.motor_asyncio import AsyncIOMotorClient
-    mongo_client = AsyncIOMotorClient(MONGO_URI)
-    db = mongo_client[DB_NAME]
-
-def get_collection_name_from_path(path: str) -> str:
-    return os.path.splitext(os.path.basename(path))[0]
-
-async def load_bot_data(data_file: str = "/opt/render/project/src/bot_data.json", query: dict = {}) -> Union[dict, list, None]:
+def load_bot_data(data_file: str = "/opt/render/project/src/bot_data.json") -> Union[dict, list, None]:
     try:
-        if USE_MONGO:
-            collection_name = get_collection_name_from_path(data_file)
-            result = await db[collection_name].find_one(query)
-            return result or {}
-        else:
-            with open(data_file, "r", encoding="utf-8") as f:
-                return json.load(f)
+        with open(data_file, "r", encoding="utf-8") as f:
+            return json.load(f)
     except FileNotFoundError:
         print(f"❌ File not found: {data_file}")
     except json.JSONDecodeError:
@@ -172,81 +155,29 @@ def find_folder_by_id(current_folder: dict, target_id: str):
                 return result
 
     return None
-async def set_user_status(user_id: int, status: str | None):
-    user_key = str(user_id)
-    if USE_MONGO:
-        if status is None:
-            await db["status_user"].delete_one({"user_id": user_key})
-        else:
-            await db["status_user"].update_one(
-                {"user_id": user_key},
-                {"$set": {"status": status}},
-                upsert=True
-            )
-    else:
-        path = "/opt/render/project/src/status_user.json"
-        try:
-            with open(path, "r") as f:
-                data = json.load(f)
-        except:
-            data = {}
+def set_user_status(user_id: int, status: str):
+    try:
+        with open("/opt/render/project/src/status_user.json", "r") as f:
+            data = json.load(f)
+    except:
+        data = {}
 
-        if status is None:
-            data.pop(user_key, None)
-        else:
-            data[user_key] = status
+    data[str(user_id)] = status
 
-        with open(path, "w") as f:
-            json.dump(data, f, indent=2)
-async def get_temp_folder(user_id: int) -> dict:
-    user_key = str(user_id)
-    if USE_MONGO:
-        doc = await db["tempfolder"].find_one({"user_id": user_key})
-        return doc["folder_data"] if doc else {}
-    else:
-        try:
-            with open("/opt/render/project/src/tempfolder.json", "r") as f:
-                data = json.load(f)
-            return data.get(user_key, {})
-        except:
-            return {}
-async def save_temp_folder(user_id: int, folder_data: dict | None):
-    user_key = str(user_id)
-    if USE_MONGO:
-        if folder_data is None:
-            await db["tempfolder"].delete_one({"user_id": user_key})
-        else:
-            await db["tempfolder"].update_one(
-                {"user_id": user_key},
-                {"$set": {"folder_data": folder_data}},
-                upsert=True
-            )
-    else:
-        path = "/opt/render/project/src/tempfolder.json"
-        try:
-            with open(path, "r") as f:
-                data = json.load(f)
-        except:
-            data = {}
+    with open("/opt/render/project/src/status_user.json", "w") as f:
+        json.dump(data, f)
+        
+def save_temp_folder(user_id: int, folder_data: dict):
+    try:
+        with open("/opt/render/project/src/tempfolder.json", "r") as f:
+            data = json.load(f)
+    except:
+        data = {}
 
-        if folder_data is None:
-            data.pop(user_key, None)
-        else:
-            data[user_key] = folder_data
+    data[str(user_id)] = folder_data
 
-        with open(path, "w") as f:
-            json.dump(data, f, indent=2)
-async def load_temp_folder(user_id: int) -> dict:
-    if USE_MONGO:
-        doc = await db["tempfolder"].find_one({"user_id": str(user_id)})
-        return doc["folder_data"] if doc else {}
-    else:
-        try:
-            with open("/opt/render/project/src/tempfolder.json", "r") as f:
-                data = json.load(f)
-            return data.get(str(user_id), {})
-        except:
-            return {}
+    with open("/opt/render/project/src/tempfolder.json", "w") as f:
+        json.dump(data, f, indent=2)
 @app.on_callback_query(filters.regex("^add_folder:"))
 async def add_folder_callback(client, callback_query):
     user_id = callback_query.from_user.id
@@ -282,41 +213,64 @@ async def add_folder_callback(client, callback_query):
 
 from filters.status_filters import StatusFilter
 
-async def get_user_status(user_id: int) -> str:
-    if USE_MONGO:
-        doc = await db["status_user"].find_one({"user_id": str(user_id)})
-        return doc["status"] if doc else ""
-    else:
-        try:
-            with open("/opt/render/project/src/status_user.json", "r") as f:
-                data = json.load(f)
-            return data.get(str(user_id), "")
-        except:
-            return ""
-            
+@app.on_message(filters.private & filters.text & StatusFilter("getting_folder_name"))
+async def receive_folder_name(client, message):
+    user_id = message.from_user.id
+    text = message.text.strip()
 
+    # 🔄 Load current status
+    with open("/opt/render/project/src/status_user.json", "r") as f:
+        status_data = json.load(f)
+    status = status_data.get(str(user_id), "")
+    parent_id = status.split(":", 1)[1]
+
+    # 🔍 Load temp folder
+    with open("/opt/render/project/src/tempfolder.json", "r") as f:
+        temp_data = json.load(f)
+
+    folder_data = temp_data.get(str(user_id), {})
+    folder_data["name"] = text
+
+    # 💾 Update temp folder with name
+    temp_data[str(user_id)] = folder_data
+    with open("/opt/render/project/src/tempfolder.json", "w") as f:
+        json.dump(temp_data, f, indent=2)
+
+    # 🔁 Update status
+    status_data[str(user_id)] = f"getting_folder_description:{parent_id}"
+    with open("/opt/render/project/src/status_user.json", "w") as f:
+        json.dump(status_data, f)
+
+    await message.reply(f"✅ नाम सेव हो गया: {text}\nअब नया folder का विवरण (description) भेजें।")
 from filters.status_filters import StatusFilter
-
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 @app.on_message(filters.private & filters.text & StatusFilter("getting_folder_description"))
 async def receive_folder_description(client, message):
     user_id = message.from_user.id
     description = message.text.strip()
 
-    # 🔄 Load current status
-    status = await get_user_status(user_id)
+    # 🔄 Load status
+    with open("/opt/render/project/src/status_user.json", "r") as f:
+        status_data = json.load(f)
+    status = status_data.get(str(user_id), "")
     parent_id = status.split(":", 1)[1]
 
-    # 📁 Load temp folder data using helper
-    folder_data = await get_temp_folder(user_id)
+    # 📁 Load temp folder data
+    with open("/opt/render/project/src/tempfolder.json", "r") as f:
+        temp_data = json.load(f)
+
+    folder_data = temp_data.get(str(user_id), {})
     folder_data["description"] = description
 
-    # 💾 Save updated folder using helper
-    await save_temp_folder(user_id, folder_data)
+    # 💾 Save updated description
+    temp_data[str(user_id)] = folder_data
+    with open("/opt/render/project/src/tempfolder.json", "w") as f:
+        json.dump(temp_data, f, indent=2)
 
-    # 🔄 Update status to 'setting_folder_permissions'
-    await set_user_status(user_id, f"setting_folder_permissions:{parent_id}")
+    # 🔄 Update status to 'toggle permissions'
+    status_data[str(user_id)] = f"setting_folder_permissions:{parent_id}"
+    with open("/opt/render/project/src/status_user.json", "w") as f:
+        json.dump(status_data, f)
 
     # 🎛 Show toggling buttons (initially ❌)
     buttons = [
@@ -334,8 +288,14 @@ async def toggle_permission_handler(client, callback_query):
     user_id = str(callback_query.from_user.id)
     permission = callback_query.data.split(":", 1)[1]  # e.g., add_file
 
-    # 🔍 Load temp folder using helper
-    folder = await get_temp_folder(user_id)
+    # 🔍 Load temp folder
+    try:
+        with open("/opt/render/project/src/tempfolder.json", "r") as f:
+            temp_data = json.load(f)
+    except:
+        temp_data = {}
+
+    folder = temp_data.get(user_id)
     if not folder:
         await callback_query.answer("❌ कोई फोल्डर डेटा नहीं मिला।", show_alert=True)
         return
@@ -347,9 +307,10 @@ async def toggle_permission_handler(client, callback_query):
     else:
         current.append(permission)
     folder["user_allow"] = current
+    temp_data[user_id] = folder
 
-    # 💾 Save updated folder using helper
-    await save_temp_folder(user_id, folder)
+    with open("/opt/render/project/src/tempfolder.json", "w") as f:
+        json.dump(temp_data, f, indent=2)
 
     # ♻️ Build updated buttons
     def btn(name, perm):
@@ -368,6 +329,7 @@ async def toggle_permission_handler(client, callback_query):
         "✅ चयन अपडेट हो गया!\nनीचे से टॉगल करें और अंत में Confirm करें।",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
+    
 import uuid
 
 @app.on_callback_query(filters.regex("^confirm_folder$"))
@@ -375,40 +337,42 @@ async def confirm_and_save_folder(client, callback_query):
     user_id = str(callback_query.from_user.id)
 
     # 🔄 Load temp folder
-    folder_data = await get_temp_folder(user_id)
+    try:
+        with open("/opt/render/project/src/tempfolder.json", "r") as f:
+            temp_data = json.load(f)
+    except:
+        await callback_query.answer("❌ Temp data not found.", show_alert=True)
+        return
+
+    folder_data = temp_data.get(user_id)
     if not folder_data:
         await callback_query.answer("❌ Temp folder missing.", show_alert=True)
         return
 
-    parent_id = folder_data.get("parent_id")
+    parent_id = folder_data["parent_id"]
 
-    # 📦 Load root bot_data from MongoDB or file
-    if USE_MONGO:
-        root_doc = await db["bot_data"].find_one({"id": "root"})
-        if not root_doc:
-            await callback_query.answer("❌ Root data missing.", show_alert=True)
-            return
-        root = root_doc.get("data", {})
-    else:
-        try:
-            with open("/opt/render/project/src/bot_data.json", "r") as f:
-                root_data = json.load(f)
-            root = root_data.get("data", {})
-        except:
-            await callback_query.answer("❌ bot_data.json missing.", show_alert=True)
-            return
+    # 🧩 Load bot_data.json
+    try:
+        with open("/opt/render/project/src/bot_data.json", "r") as f:
+            bot_data = json.load(f)
+    except:
+        await callback_query.answer("❌ bot_data.json missing.", show_alert=True)
+        return
 
     # 🔍 Find parent folder
+    root = bot_data.get("data", {})
     parent = find_folder_by_id(root, parent_id)
     if not parent:
         await callback_query.answer("❌ Parent folder not found.", show_alert=True)
         return
 
-    # 🔢 Calculate row/col
+    # 🔢 Calculate next row/col
     existing = parent.get("items", [])
-    row = len(existing)
+    total = len(existing)
+    row = total
     col = 0
 
+    # ✅ Prepare new folder item
     new_item = {
         "id": f"item_{uuid.uuid4().hex[:6]}",
         "name": folder_data["name"],
@@ -422,21 +386,26 @@ async def confirm_and_save_folder(client, callback_query):
         "column": col
     }
 
+    # ➕ Add to items
     parent.setdefault("items", []).append(new_item)
 
-    # 💾 Save updated bot_data
-    if USE_MONGO:
-        await db["bot_data"].update_one(
-            {"id": "root"},
-            {"$set": {"data": root}}
-        )
-    else:
-        with open("/opt/render/project/src/bot_data.json", "w") as f:
-            json.dump({"data": root}, f, indent=2)
+    # 💾 Save updated bot_data.json
+    with open("/opt/render/project/src/bot_data.json", "w") as f:
+        json.dump(bot_data, f, indent=2)
 
-    # 🧹 Clear temp and status
-    await save_temp_folder(user_id, None)
-    await set_user_status(user_id, None)
+    # 🧹 Clean temp and status
+    temp_data.pop(user_id, None)
+    with open("/opt/render/project/src/tempfolder.json", "w") as f:
+        json.dump(temp_data, f)
+
+    try:
+        with open("/opt/render/project/src/status_user.json", "r") as f:
+            status_data = json.load(f)
+    except:
+        status_data = {}
+    status_data.pop(user_id, None)
+    with open("/opt/render/project/src/status_user.json", "w") as f:
+        json.dump(status_data, f)
 
     await callback_query.message.edit_text(f"📁 Folder '{new_item['name']}' saved successfully!")
 @app.on_callback_query(filters.regex(r"^add_url:(.+)$"))
