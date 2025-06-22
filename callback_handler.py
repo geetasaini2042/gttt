@@ -16,7 +16,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInf
 ADMINS = [6150091802, 2525267728]
 
 ADMINS = [6150091802, 2525267728]
-data_file = "/tmp/bot_data.json"
+data_file = "/opt/render/project/src/bot_data.json"
 
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from typing import Union
@@ -31,7 +31,7 @@ if USE_MONGO:
 def get_collection_name_from_path(path: str) -> str:
     return os.path.splitext(os.path.basename(path))[0]
 
-async def load_bot_data(data_file: str = "/tmp/bot_data.json", query: dict = {}) -> Union[dict, list, None]:
+async def load_bot_data(data_file: str = "/opt/render/project/src/bot_data.json", query: dict = {}) -> Union[dict, list, None]:
     try:
         if USE_MONGO:
             collection_name = get_collection_name_from_path(data_file)
@@ -184,7 +184,7 @@ async def set_user_status(user_id: int, status: str | None):
                 upsert=True
             )
     else:
-        path = "/tmp/status_user.json"
+        path = "/opt/render/project/src/status_user.json"
         try:
             with open(path, "r") as f:
                 data = json.load(f)
@@ -205,7 +205,7 @@ async def get_temp_folder(user_id: int) -> dict:
         return doc["folder_data"] if doc else {}
     else:
         try:
-            with open("/tmp/tempfolder.json", "r") as f:
+            with open("/opt/render/project/src/tempfolder.json", "r") as f:
                 data = json.load(f)
             return data.get(user_key, {})
         except:
@@ -222,7 +222,7 @@ async def save_temp_folder(user_id: int, folder_data: dict | None):
                 upsert=True
             )
     else:
-        path = "/tmp/tempfolder.json"
+        path = "/opt/render/project/src/tempfolder.json"
         try:
             with open(path, "r") as f:
                 data = json.load(f)
@@ -242,7 +242,7 @@ async def load_temp_folder(user_id: int) -> dict:
         return doc["folder_data"] if doc else {}
     else:
         try:
-            with open("/tmp/tempfolder.json", "r") as f:
+            with open("/opt/render/project/src/tempfolder.json", "r") as f:
                 data = json.load(f)
             return data.get(str(user_id), {})
         except:
@@ -288,7 +288,7 @@ async def get_user_status(user_id: int) -> str:
         return doc["status"] if doc else ""
     else:
         try:
-            with open("/tmp/status_user.json", "r") as f:
+            with open("/opt/render/project/src/status_user.json", "r") as f:
                 data = json.load(f)
             return data.get(str(user_id), "")
         except:
@@ -391,7 +391,7 @@ async def confirm_and_save_folder(client, callback_query):
         root = root_doc.get("data", {})
     else:
         try:
-            with open("/tmp/bot_data.json", "r") as f:
+            with open("/opt/render/project/src/bot_data.json", "r") as f:
                 root_data = json.load(f)
             root = root_data.get("data", {})
         except:
@@ -431,7 +431,7 @@ async def confirm_and_save_folder(client, callback_query):
             {"$set": {"data": root}}
         )
     else:
-        with open("/tmp/bot_data.json", "w") as f:
+        with open("/opt/render/project/src/bot_data.json", "w") as f:
             json.dump({"data": root}, f, indent=2)
 
     # 🧹 Clear temp and status
@@ -445,23 +445,23 @@ async def add_url_callback(client, callback_query):
     user_id = str(callback_query.from_user.id)
 
     # ✅ Status Set
-    with open("/tmp/status_user.json", "r") as f:
+    with open("/opt/render/project/src/status_user.json", "r") as f:
         content = f.read().strip()
         status_data = json.loads(content) if content else {}
 
     status_data[user_id] = f"getting_url_name:{folder_id}"
-    with open("/tmp/status_user.json", "w") as f:
+    with open("/opt/render/project/src/status_user.json", "w") as f:
         json.dump(status_data, f, indent=2)
 
     # ✅ Temp init
-    with open("/tmp/tempurl.json", "r") as f:
+    with open("/opt/render/project/src/tempurl.json", "r") as f:
         content = f.read().strip()
         temp_data = json.loads(content) if content else {}
 
     temp_data[user_id] = {
         "folder_id": folder_id
     }
-    with open("/tmp/tempurl.json", "w") as f:
+    with open("/opt/render/project/src/tempurl.json", "w") as f:
         json.dump(temp_data, f, indent=2)
 
     await callback_query.message.edit_text("📌 कृपया URL का नाम भेजें (जैसे: 'NCERT Site')")
@@ -470,7 +470,7 @@ async def receive_url_name(client, message):
     user_id = str(message.from_user.id)
     url_name = message.text.strip()
 
-    with open("/tmp/tempurl.json", "r") as f:
+    with open("/opt/render/project/src/tempurl.json", "r") as f:
         content = f.read().strip()
         temp_data = json.loads(content) if content else {}
 
@@ -482,15 +482,15 @@ async def receive_url_name(client, message):
         temp_data[user_id] = {}
     temp_data[user_id]["name"] = url_name
 
-    with open("/tmp/tempurl.json", "w") as f:
+    with open("/opt/render/project/src/tempurl.json", "w") as f:
         json.dump(temp_data, f, indent=2)
 
-    with open("/tmp/status_user.json", "r") as f:
+    with open("/opt/render/project/src/status_user.json", "r") as f:
         status_data = json.load(f)
 
     folder_id = status_data[user_id].split(":")[1]
     status_data[user_id] = f"getting_url:{folder_id}"
-    with open("/tmp/status_user.json", "w") as f:
+    with open("/opt/render/project/src/status_user.json", "w") as f:
         json.dump(status_data, f)
 
     await message.reply("🔗 अब URL भेजें (जैसे: https://...)")
@@ -504,18 +504,18 @@ async def receive_url(client, message):
         await message.reply("❌ कृपया एक मान्य URL भेजें।")
         return
 
-    with open("/tmp/tempurl.json", "r") as f:
+    with open("/opt/render/project/src/tempurl.json", "r") as f:
         temp_data = json.load(f)
     temp_data[user_id]["url"] = url
-    with open("/tmp/tempurl.json", "w") as f:
+    with open("/opt/render/project/src/tempurl.json", "w") as f:
         json.dump(temp_data, f, indent=2)
 
-    with open("/tmp/status_user.json", "r") as f:
+    with open("/opt/render/project/src/status_user.json", "r") as f:
         status_data = json.load(f)
 
     folder_id = status_data[user_id].split(":")[1]
     status_data[user_id] = f"getting_caption_url:{folder_id}"
-    with open("/tmp/status_user.json", "w") as f:
+    with open("/opt/render/project/src/status_user.json", "w") as f:
         json.dump(status_data, f)
 
     await message.reply("📝 अब उसके लिए एक caption भेजें।")
@@ -524,13 +524,13 @@ async def receive_url_caption(client, message):
     user_id = str(message.from_user.id)
     caption = message.text.strip()
 
-    with open("/tmp/tempurl.json", "r") as f:
+    with open("/opt/render/project/src/tempurl.json", "r") as f:
         temp_data = json.load(f)
     url_data = temp_data.get(user_id, {})
     url_data["caption"] = caption
 
     folder_id = url_data.get("folder_id")
-    with open("/tmp/bot_data.json", "r") as f:
+    with open("/opt/render/project/src/bot_data.json", "r") as f:
         bot_data = json.load(f)
 
     root = bot_data.get("data", {})
@@ -554,17 +554,17 @@ async def receive_url_caption(client, message):
 
     parent.setdefault("items", []).append(new_item)
 
-    with open("/tmp/bot_data.json", "w") as f:
+    with open("/opt/render/project/src/bot_data.json", "w") as f:
         json.dump(bot_data, f, indent=2)
 
     temp_data.pop(user_id, None)
-    with open("/tmp/tempurl.json", "w") as f:
+    with open("/opt/render/project/src/tempurl.json", "w") as f:
         json.dump(temp_data, f)
 
-    with open("/tmp/status_user.json", "r") as f:
+    with open("/opt/render/project/src/status_user.json", "r") as f:
         status_data = json.load(f)
     status_data.pop(user_id, None)
-    with open("/tmp/status_user.json", "w") as f:
+    with open("/opt/render/project/src/status_user.json", "w") as f:
         json.dump(status_data, f)
 
     await message.reply("🔗 URL सफलतापूर्वक जोड़ दिया गया ✅")
@@ -601,7 +601,7 @@ async def edit_menu_handler(client, callback_query):
     user_id = callback_query.from_user.id
 
     # 🔁 Load data
-    with open("/tmp/bot_data.json", "r") as f:
+    with open("/opt/render/project/src/bot_data.json", "r") as f:
         data = json.load(f)
 
     # 🔍 Recursive function to find any folder
@@ -652,7 +652,7 @@ async def edit_item_handler(client, callback_query):
     _, folder_id, item_id = callback_query.data.split(":")
     user_id = callback_query.from_user.id
 
-    with open("/tmp/bot_data.json", "r") as f:
+    with open("/opt/render/project/src/bot_data.json", "r") as f:
         data = json.load(f)
 
     # ✅ Corrected recursive folder finder
@@ -702,12 +702,12 @@ async def rename_item_callback(client, callback_query):
     user_id = str(callback_query.from_user.id)
 
     # Save as: renaming:<folder_id>:<item_id>
-    with open("/tmp/status_user.json", "r") as f:
+    with open("/opt/render/project/src/status_user.json", "r") as f:
         data = json.load(f)
 
     data[user_id] = f"renaming:{folder_id}:{item_id}"
 
-    with open("/tmp/status_user.json", "w") as f:
+    with open("/opt/render/project/src/status_user.json", "w") as f:
         json.dump(data, f, indent=2)
 
     await callback_query.message.edit_text("📝 नया नाम भेजिए:")
@@ -719,7 +719,7 @@ async def rename_text_handler(client, message):
     new_name = message.text.strip()
 
     # Load status
-    with open("/tmp/status_user.json", "r") as f:
+    with open("/opt/render/project/src/status_user.json", "r") as f:
         status_data = json.load(f)
 
     status = status_data.get(user_id, "")
@@ -731,7 +731,7 @@ async def rename_text_handler(client, message):
     _, folder_id, item_id = parts
 
     # Load bot data
-    with open("/tmp/bot_data.json", "r") as f:
+    with open("/opt/render/project/src/bot_data.json", "r") as f:
         bot_data = json.load(f)
 
     def find_folder(folder, fid):
@@ -754,11 +754,11 @@ async def rename_text_handler(client, message):
 
     item["name"] = new_name
 
-    with open("/tmp/bot_data.json", "w") as f:
+    with open("/opt/render/project/src/bot_data.json", "w") as f:
         json.dump(bot_data, f, indent=2)
 
     del status_data[user_id]
-    with open("/tmp/status_user.json", "w") as f:
+    with open("/opt/render/project/src/status_user.json", "w") as f:
         json.dump(status_data, f, indent=2)
 
     await message.reply("✅ नाम बदल दिया गया।")
@@ -769,12 +769,12 @@ async def delete_item_confirm(client, callback_query):
     user_id = str(callback_query.from_user.id)
 
     # Save status
-    with open("/tmp/status_user.json", "r") as f:
+    with open("/opt/render/project/src/status_user.json", "r") as f:
         status_data = json.load(f)
 
     status_data[user_id] = f"deleting:{folder_id}:{item_id}"
 
-    with open("/tmp/status_user.json", "w") as f:
+    with open("/opt/render/project/src/status_user.json", "w") as f:
         json.dump(status_data, f, indent=2)
 
     await callback_query.message.edit_text(
@@ -787,7 +787,7 @@ async def delete_item_final(client, message):
     entered_text = message.text.strip()
 
     # Load status
-    with open("/tmp/status_user.json", "r") as f:
+    with open("/opt/render/project/src/status_user.json", "r") as f:
         status_data = json.load(f)
 
     status = status_data.get(user_id, "")
@@ -800,12 +800,12 @@ async def delete_item_final(client, message):
     # Compare folder ID
     if entered_text != folder_id:
         del status_data[user_id]
-        with open("/tmp/status_user.json", "w") as f:
+        with open("/opt/render/project/src/status_user.json", "w") as f:
             json.dump(status_data, f, indent=2)
         return await message.reply("❌ Folder ID गलत है। Delete नहीं किया गया।")
 
     # Load main data
-    with open("/tmp/bot_data.json", "r") as f:
+    with open("/opt/render/project/src/bot_data.json", "r") as f:
         bot_data = json.load(f)
 
     def find_folder(folder, fid):
@@ -826,12 +826,12 @@ async def delete_item_final(client, message):
     folder["items"] = [i for i in folder.get("items", []) if i["id"] != item_id]
 
     # Save
-    with open("/tmp/bot_data.json", "w") as f:
+    with open("/opt/render/project/src/bot_data.json", "w") as f:
         json.dump(bot_data, f, indent=2)
 
     # Clear status
     del status_data[user_id]
-    with open("/tmp/status_user.json", "w") as f:
+    with open("/opt/render/project/src/status_user.json", "w") as f:
         json.dump(status_data, f, indent=2)
 
     await message.reply("✅ Item delete कर दिया गया।")
@@ -840,7 +840,7 @@ async def move_menu_handler(client, callback_query):
     folder_id, item_id = callback_query.data.split(":")[1:]
     user_id = callback_query.from_user.id
 
-    with open("/tmp/bot_data.json", "r") as f:
+    with open("/opt/render/project/src/bot_data.json", "r") as f:
         data = json.load(f)
 
     def find_folder(folder, fid):
@@ -892,11 +892,11 @@ async def move_menu_handler(client, callback_query):
     )
 
 def load_data():
-    with open("/tmp/bot_data.json", "r") as f:
+    with open("/opt/render/project/src/bot_data.json", "r") as f:
         return json.load(f)
 
 def save_data(data):
-    with open("/tmp/bot_data.json", "w") as f:
+    with open("/opt/render/project/src/bot_data.json", "w") as f:
         json.dump(data, f, indent=2)
 
 def find_folder(folder, fid):
@@ -1173,23 +1173,23 @@ async def add_webapp_callback(client, callback_query):
     user_id = str(callback_query.from_user.id)
 
     # ✅ Status Set
-    with open("/tmp/status_user.json", "r") as f:
+    with open("/opt/render/project/src/status_user.json", "r") as f:
         content = f.read().strip()
         status_data = json.loads(content) if content else {}
 
     status_data[user_id] = f"getting_webapp_name:{folder_id}"
-    with open("/tmp/status_user.json", "w") as f:
+    with open("/opt/render/project/src/status_user.json", "w") as f:
         json.dump(status_data, f, indent=2)
 
     # ✅ Temp init
-    with open("/tmp/tempwebapp.json", "r") as f:
+    with open("/opt/render/project/src/tempwebapp.json", "r") as f:
         content = f.read().strip()
         temp_data = json.loads(content) if content else {}
 
     temp_data[user_id] = {
         "folder_id": folder_id
     }
-    with open("/tmp/tempwebapp.json", "w") as f:
+    with open("/opt/render/project/src/tempwebapp.json", "w") as f:
         json.dump(temp_data, f, indent=2)
 
     await callback_query.message.edit_text("📌 कृपया web app URL का नाम भेजें (जैसे: 'NCERT Site')")
@@ -1198,22 +1198,22 @@ async def receive_webapp_name(client, message):
     user_id = str(message.from_user.id)
     webapp_name = message.text.strip()
 
-    with open("/tmp/tempwebapp.json", "r") as f:
+    with open("/opt/render/project/src/tempwebapp.json", "r") as f:
         content = f.read().strip()
         temp_data = json.loads(content) if content else {}
     if user_id not in temp_data:
         temp_data[user_id] = {}
     temp_data[user_id]["name"] = webapp_name
 
-    with open("/tmp/tempwebapp.json", "w") as f:
+    with open("/opt/render/project/src/tempwebapp.json", "w") as f:
         json.dump(temp_data, f, indent=2)
 
-    with open("/tmp/status_user.json", "r") as f:
+    with open("/opt/render/project/src/status_user.json", "r") as f:
         status_data = json.load(f)
 
     folder_id = status_data[user_id].split(":")[1]
     status_data[user_id] = f"getting_webapp:{folder_id}"
-    with open("/tmp/status_user.json", "w") as f:
+    with open("/opt/render/project/src/status_user.json", "w") as f:
         json.dump(status_data, f)
 
     await message.reply("🔗 अब URL भेजें (जैसे: https://...)")
@@ -1242,7 +1242,7 @@ async def receive_webapp(client: Client, message: Message):
             return
 
     try:
-        with open("/tmp/tempwebapp.json", "r") as f:
+        with open("/opt/render/project/src/tempwebapp.json", "r") as f:
             temp_data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         temp_data = {}
@@ -1252,16 +1252,16 @@ async def receive_webapp(client: Client, message: Message):
 
     temp_data[user_id]["webapp"] = webapp
 
-    with open("/tmp/tempwebapp.json", "w") as f:
+    with open("/opt/render/project/src/tempwebapp.json", "w") as f:
         json.dump(temp_data, f, indent=2)
 
-    with open("/tmp/status_user.json", "r") as f:
+    with open("/opt/render/project/src/status_user.json", "r") as f:
         status_data = json.load(f)
 
     folder_id = status_data[user_id].split(":")[1]
     status_data[user_id] = f"getting_caption_webapp:{folder_id}"
 
-    with open("/tmp/status_user.json", "w") as f:
+    with open("/opt/render/project/src/status_user.json", "w") as f:
         json.dump(status_data, f)
 
     await message.reply("📝 अब उसके लिए एक caption भेजें।")
@@ -1270,13 +1270,13 @@ async def receive_webapp_caption(client, message):
     user_id = str(message.from_user.id)
     caption = message.text.strip()
 
-    with open("/tmp/tempwebapp.json", "r") as f:
+    with open("/opt/render/project/src/tempwebapp.json", "r") as f:
         temp_data = json.load(f)
     webapp_data = temp_data.get(user_id, {})
     webapp_data["caption"] = caption
 
     folder_id = webapp_data.get("folder_id")
-    with open("/tmp/bot_data.json", "r") as f:
+    with open("/opt/render/project/src/bot_data.json", "r") as f:
         bot_data = json.load(f)
 
     root = bot_data.get("data", {})
@@ -1300,17 +1300,17 @@ async def receive_webapp_caption(client, message):
 
     parent.setdefault("items", []).append(new_item)
 
-    with open("/tmp/bot_data.json", "w") as f:
+    with open("/opt/render/project/src/bot_data.json", "w") as f:
         json.dump(bot_data, f, indent=2)
 
     temp_data.pop(user_id, None)
-    with open("/tmp/tempwebapp.json", "w") as f:
+    with open("/opt/render/project/src/tempwebapp.json", "w") as f:
         json.dump(temp_data, f)
 
-    with open("/tmp/status_user.json", "r") as f:
+    with open("/opt/render/project/src/status_user.json", "r") as f:
         status_data = json.load(f)
     status_data.pop(user_id, None)
-    with open("/tmp/status_user.json", "w") as f:
+    with open("/opt/render/project/src/status_user.json", "w") as f:
         json.dump(status_data, f)
 
     await message.reply("🔗 URL सफलतापूर्वक जोड़ दिया गया ✅")
