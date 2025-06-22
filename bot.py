@@ -2,37 +2,21 @@ import json
 import os
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
-import callback_handler 
-import threading
 from script import app, run_flask, run_bot
+import callback_handler 
+
+# Define Admin IDs
 ADMINS = [6150091802, 2525267728]
-data_file = "/storage/emulated/0/BotBuilder/PYTHON/bot_data.json"
+data_file = "/opt/render/project/src/bot_data.json"
 
 # Save user to users.json
 import json
 from typing import Union
 
-from typing import Union
-import json, os
-from config import USE_MONGO, MONGO_URI, DB_NAME
-
-if USE_MONGO:
-    from motor.motor_asyncio import AsyncIOMotorClient
-    mongo_client = AsyncIOMotorClient(MONGO_URI)
-    db = mongo_client[DB_NAME]
-
-def get_collection_name_from_path(path: str) -> str:
-    return os.path.splitext(os.path.basename(path))[0]
-
-async def load_bot_data(data_file: str = "/storage/emulated/0/BotBuilder/PYTHON/bot_data.json", query: dict = {}) -> Union[dict, list, None]:
+def load_bot_data(data_file: str = "/opt/render/project/src/bot_data.json") -> Union[dict, list, None]:
     try:
-        if USE_MONGO:
-            collection_name = get_collection_name_from_path(data_file)
-            result = await db[collection_name].find_one(query)
-            return result or {}
-        else:
-            with open(data_file, "r", encoding="utf-8") as f:
-                return json.load(f)
+        with open(data_file, "r", encoding="utf-8") as f:
+            return json.load(f)
     except FileNotFoundError:
         print(f"❌ File not found: {data_file}")
     except json.JSONDecodeError:
@@ -41,25 +25,23 @@ async def load_bot_data(data_file: str = "/storage/emulated/0/BotBuilder/PYTHON/
         print(f"⚠ Unexpected error: {e}")
     return None
 
-async def save_user(user_id: int):
-    if USE_MONGO:
-        collection = db["users"]
-        existing = await collection.find_one({"user_id": user_id})
-        if not existing:
-            await collection.insert_one({"user_id": user_id})
-    else:
-        path = "/storage/emulated/0/BotBuilder/PYTHON/users.json"
-        try:
-            with open(path, "r") as f:
-                data = json.load(f)
-                users = data.get("users", []) if isinstance(data, dict) else data
-        except (FileNotFoundError, json.JSONDecodeError):
-            users = []
+def save_user(user_id: int):
+    try:
+        with open("/opt/render/project/src/users.json", "r") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                users = data.get("users", [])
+            else:
+                users = data
+    except (FileNotFoundError, json.JSONDecodeError):
+        users = []
 
-        if user_id not in users:
-            users.append(user_id)
-            with open(path, "w") as f:
-                json.dump(users, f)
+    if user_id not in users:
+        users.append(user_id)
+
+        with open("/opt/render/project/src/users.json", "w") as f:
+            json.dump(users, f)
+
 # Generate inline keyboard for root folder + admin buttons
 from collections import defaultdict
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -71,13 +53,12 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInf
 from collections import defaultdict
 import json
 
-async def get_root_inline_keyboard(user_id: int):
+def get_root_inline_keyboard(user_id: int):
     try:
-        data = await load_bot_data("/storage/emulated/0/BotBuilder/PYTHON/bot_data.json")
-        root = data.get("data", {}) or {}
-    except Exception as e:
-        print("Error loading root:", e)
-        root = {}
+        with open("/opt/render/project/src/bot_data.json", "r") as f:
+            root = json.load(f)["data"]
+    except (FileNotFoundError, KeyError, json.JSONDecodeError):
+        return InlineKeyboardMarkup([[InlineKeyboardButton("❌ No Data", callback_data="no_data")]])
 
     layout = defaultdict(dict)
 
@@ -147,10 +128,10 @@ async def get_root_inline_keyboard(user_id: int):
 @app.on_message(filters.command("start") & filters.private)
 async def start_handler(client, message: Message):
     user_id = message.from_user.id
-    await save_user(user_id)
+    save_user(user_id)
 
     welcome_text = "👋 **Welcome to PDF Hub!**\n\nयहाँ से आप अपनी ज़रूरत की PDF फाइल्स पा सकते हैं। नीचे से फ़ोल्डर या फाइल चुनें:"
-    markup = await get_root_inline_keyboard(user_id)
+    markup = get_root_inline_keyboard(user_id)
 
     await message.reply_text(welcome_text, reply_markup=markup)
 
