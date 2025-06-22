@@ -1,0 +1,72 @@
+{
+  "data": {
+    "id": "root",
+    "name": "Root",
+    "description": "Welcome to PDF Hub.",
+    "type": "folder",
+    "created_by": 6150091802,
+    "parent_id": null,
+    "user_allow": [
+      "add_file",
+      "add_folder",
+      "add_url",
+      "add_webapp"
+    ],
+    "items": [
+      {
+        "id": "item_b2281f",
+        "name": "Syllabus",
+        "description": "Yes thos is",
+        "type": "folder",
+        "created_by": 6150091802,
+        "parent_id": "root",
+        "user_allow": [
+          "add_folder"
+        ],
+        "items": [],
+        "row": 0,
+        "column": 0
+      },
+      {
+        "id": "item_101",
+        "name": "Ncert Books",
+        "type": "folder",
+        "description": "Select a Class",
+        "created_by": 6150091802,
+        "parent_id": "root",
+        "row": 0,
+        "column": 0,
+        "user_allow": [
+          "add_file",
+          "add_folder"
+        ],
+        "items": []
+      },
+      {
+        "id": "webapp_cec9939b4a41",
+        "type": "webapp",
+        "name": "Web app",
+        "url": "https://tyu.me/aibots72",
+        "caption": "U",
+        "created_by": 7733966632,
+        "row": 1,
+        "column": 0
+      },
+      {
+        "id": "item_b387ff",
+        "name": "UPSC",
+        "description": "Ui",
+        "type": "folder",
+        "created_by": 6150091802,
+        "parent_id": "root",
+        "user_allow": [
+          "add_folder"
+        ],
+        "items": [],
+        "row": 1,
+        "column": 1
+      }
+    ]
+    
+  }
+}
