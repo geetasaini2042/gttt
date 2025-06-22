@@ -8,7 +8,7 @@ db = client["bot_database"]
 collection = db["bot_data_collection"]
 
 # File Path
-BOTES_DATA_FILE = "/opt/render/project/src/botes_data.json"
+BOTES_DATA_FILE = "/opt/render/project/src/bot_data.json"
 
 # Default structure (same as earlier)
 DEFAULT_JSON = {
