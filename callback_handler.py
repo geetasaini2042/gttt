@@ -424,6 +424,7 @@ async def confirm_and_save_folder(client, callback_query):
     status_data.pop(user_id, None)
     with open(status_user_file, "w") as f:
         json.dump(status_data, f)
+    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     kb = generate_folder_keyboard(parent, int(user_id))
     await callback_query.message.edit_text(f"📁 Folder '{new_item['name']}' saved successfully!", reply_markup=kb)
 @app.on_callback_query(filters.regex(r"^add_url:(.+)$"))
@@ -559,8 +560,10 @@ async def receive_url_caption(client, message):
     status_data.pop(user_id, None)
     with open(status_user_file, "w") as f:
         json.dump(status_data, f)
+    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     kb = generate_folder_keyboard(parent, int(user_id))
     await message.reply("🔗 URL Added Successfully✅️", reply_markup=kb)
+
 def find_folder_by_id(folder, folder_id):
     if folder.get("id") == folder_id and folder.get("type") == "folder":
         return folder
@@ -778,8 +781,10 @@ async def update_created_by_handler(client, callback_query):
     with open(data_file, "w") as f:
         json.dump(data, f, indent=2)
     kb = generate_folder_keyboard(folder, int(user_id))
+    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     await callback_query.answer("✅ Ownership updated successfully.")
     await callback_query.message.edit_text(f"🆕 This folder is now owned by you (User ID: `{user_id}`)",reply_markup=kb)
+
 @app.on_callback_query(filters.regex(r"^update_description:(.+)$"))
 async def update_description_prompt(client, callback_query):
     folder_id = callback_query.data.split(":")[1]
@@ -856,6 +861,7 @@ async def receive_new_description(client, message):
     status_data.pop(user_id, None)
     with open(status_user_file, "w") as f:
         json.dump(status_data, f)
+    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     kb = generate_folder_keyboard(folder, int(user_id))
     await message.reply(new_description, reply_markup =kb)
 @app.on_callback_query(filters.regex(r"^rename:(.+):(.+)$"))
@@ -948,6 +954,7 @@ async def rename_text_handler(client, message):
     del status_data[user_id]
     with open(status_user_file, "w") as f:
         json.dump(status_data, f, indent=2)
+    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     kb = generate_folder_keyboard(folder, int(user_id))
     await message.reply("✅ Name Renamed",reply_markup=kb)
 
@@ -1025,6 +1032,7 @@ async def delete_item_final(client, message):
     del status_data[user_id]
     with open(status_user_file, "w") as f:
         json.dump(status_data, f, indent=2)
+    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     kb = generate_folder_keyboard(folder, int(user_id))
     await message.reply("✅ Item deleted",reply_markup=kb)
 @app.on_callback_query(filters.regex(r"^move_menu:(.+):(.+)$"))
@@ -1515,6 +1523,7 @@ async def receive_webapp_caption(client, message):
     status_data.pop(user_id, None)
     with open(status_user_file, "w") as f:
         json.dump(status_data, f)
+    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     kb = generate_folder_keyboard(parent, int(user_id))
     await message.reply("🧩 WebApp सफलतापूर्वक जोड़ा गया ✅", reply_markup=kb)
 @app.on_callback_query(filters.regex(r"^add_file:(.+)$"))
@@ -2004,6 +2013,7 @@ async def confirm_file_callback(client, callback_query):
         json.dump(status_data, f, indent=2)
 
     # ✅ Folder open again
+    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     kb = generate_folder_keyboard(parent, int(user_id))
     await callback_query.message.edit_caption("✅ फ़ाइल सफलतापूर्वक सेव हो गई 📂", reply_markup=kb)
 def find_folder_id_of_item(folder, target_id):
@@ -2414,4 +2424,5 @@ async def toggle_folder_allow_callback(client, callback_query):
         json.dump(data, f, indent=2)
 
     # Refresh menu
+    #requests.post("https://botbuilder-6861.onrender.com/upload-data")
     await update_folder_allow_handler(client, callback_query)
