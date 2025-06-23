@@ -1,18 +1,1 @@
-{
-  "5943119285": {
-    "user_id": 5943119285,
-    "parent_id": "item_b387ff",
-    "parent_name": "UPSC",
-    "name": "J",
-    "description": "Jc",
-    "user_allow": []
-  },
-  "6150091802": {
-    "user_id": 6150091802,
-    "parent_id": "root",
-    "parent_name": "Root",
-    "name": "",
-    "description": "",
-    "user_allow": []
-  }
-}
+{}
