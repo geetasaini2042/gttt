@@ -1,24 +1,13 @@
 from pyrogram import Client
 import os
-from dotenv import load_dotenv
 from config import save_mongodb_data_to_file
-load_dotenv()
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 import os
 import json
 from pymongo import MongoClient
 from flask import Flask, request, jsonify
-# MongoDB Setup
-
-
-# File Path
-BOTES_DATA_FILE = "/opt/render/project/src/bot_data.json"
-
-# Default structure (same as earlier)
+from bson import json_util
+from common_data import data_file, API_ID, API_HASH,BOT_TOKEN, MD_URI
+app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 DEFAULT_JSON = {
     "data": {
         "id": "root",
@@ -37,16 +26,16 @@ flask_app = Flask(__name__)
 @flask_app.route("/upload-data", methods=["GET", "POST"])
 def handle_data():
     # File check and creation if not exists
-    client = MongoClient("mongodb+srv://pankajsainikishanpura02:SHivxQzJdLrvbA9M@cluster0.tftxnvm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+    client = MongoClient(MD_URI)
     db = client["bot_database"]
     collection = db["bot_data_collection"]
-    if not os.path.exists(BOTES_DATA_FILE):
-        with open(BOTES_DATA_FILE, "w") as f:
+    if not os.path.exists(data_file):
+        with open(data_file, "w") as f:
             json.dump(DEFAULT_JSON, f, indent=2)
 
     # Load data from file
     try:
-        with open(BOTES_DATA_FILE, "r") as f:
+        with open(data_file, "r") as f:
             file_data = json.load(f)
     except Exception as e:
         return jsonify({"status": "error", "message": "Failed to read local JSON", "error": str(e)}), 500
@@ -80,14 +69,109 @@ def handle_data():
             })
         except Exception as e:
             return jsonify({"status": "error", "message": "MongoDB insert failed", "error": str(e)}), 500
+@flask_app.route("/save-to-mongodb-from-file", methods=["GET"])
+def save_to_mongodb():
+    try:
+        # JSON फाइल से डेटा पढ़ना
+        with open(data_file, "r", encoding="utf-8") as f:
+            file_data = json.load(f)
+
+        # MongoDB कनेक्शन
+        client = MongoClient(MD_URI)
+        db = client["bot_database"]
+        collection = db["bot_data_collection"]
+
+        # MongoDB में सेव करना
+        result = collection.update_one(
+            {"data.id": file_data["data"]["id"]},
+            {"$set": file_data},
+            upsert=True
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": "Data saved to MongoDB",
+            "matched_count": result.matched_count,
+            "modified_count": result.modified_count,
+            "upserted_id": str(result.upserted_id) if result.upserted_id else None
+        })
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": "MongoDB insert failed",
+            "error": str(e)
+        }), 500
+@flask_app.route("/save-from-mongodb-to-file")
+def savindtogilr():
+  save_mongodb_data_to_file()
+  return "Saved Successfully"
+
+@flask_app.route("/get-mongodb-data", methods=["GET"])
+def get_all_data():
+    client = MongoClient(MD_URI)
+    db = client["bot_database"]
+    collection = db["bot_data_collection"]
+    try:
+        # सभी डॉक्स को लाओ
+        data = list(collection.find({}))
+        return json_util.dumps({"status": "success", "data": data}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @flask_app.route("/")
 def home():
     return "Flask server is running."
+
+
 def run_flask():
     flask_app.run(host="0.0.0.0", port=5000)
 
 def run_bot():
-    save_mongodb_data_to_file()
+    #save_mongodb_data_to_file()
     app.run()
     print("Stopped\n")
-    
+
+def get_created_by_from_folder(folder_id):
+    try:
+        with open("/storage/emulated/0/BotBuilder/PYTHON/bot_data.json") as f:
+            bot_data = json.load(f)
+    except:
+        return None
+
+    def find_created_by(folder):
+        if folder.get("id") == folder_id and folder.get("type") == "folder":
+            return folder.get("created_by")
+        for item in folder.get("items", []):
+            if item.get("type") == "folder":
+                result = find_created_by(item)
+                if result is not None:
+                    return result
+        return None
+
+    root = bot_data.get("data", {})
+    return find_created_by(root)
+
+def is_user_action_allowed(folder_id, action):
+    try:
+        with open("/storage/emulated/0/BotBuilder/PYTHON/bot_data.json") as f:
+            data = json.load(f)
+    except:
+        return False
+
+    def find_folder(folder):
+        if folder.get("id") == folder_id and folder.get("type") == "folder":
+            return folder
+        for item in folder.get("items", []):
+            if item.get("type") == "folder":
+                result = find_folder(item)
+                if result:
+                    return result
+        return None
+
+    root = data.get("data", {})
+    folder = find_folder(root)
+    if not folder:
+        return False
+
+    return action in folder.get("user_allow", [])

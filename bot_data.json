@@ -1,0 +1,294 @@
+{
+  "data": {
+    "id": "root",
+    "name": "Root",
+    "description": "Hello Students Welcome to SingodiyaTech. The Online PlatForm to Education...\ud83d\udc4b Hello ${full_name},\nWelcome to PDF Hub!\nYour ID: ${id}\nOpen Telegram\n${first_name}",
+    "type": "folder",
+    "created_by": 6150091802,
+    "parent_id": null,
+    "user_allow": [],
+    "items": [
+      {
+        "id": "item_b2281f",
+        "name": "Syllabus",
+        "description": "Yes thos is",
+        "type": "folder",
+        "created_by": 6150091802,
+        "parent_id": "root",
+        "user_allow": [
+          "add_folder",
+          "add_url",
+          "add_file",
+          "add_webapp"
+        ],
+        "items": [],
+        "row": 0,
+        "column": 0
+      },
+      {
+        "id": "item_101",
+        "name": "Ncert Books",
+        "type": "folder",
+        "description": "Select a Class",
+        "created_by": 6150091802,
+        "parent_id": "root",
+        "row": 0,
+        "column": 1,
+        "user_allow": [],
+        "items": [
+          {
+            "id": "file_c1e0b3d9c253",
+            "type": "file",
+            "name": "org.samo_lego.canta_1.4.1_91.apk",
+            "file_id": "BQACAgUAAyEGAASQTtqMAAJMFWhY3BOWeeZPzuJK0QO-P-J08K1dAAJ5FAACtvfBVr6tLDX5dikuHgQ",
+            "caption": "Canta apk",
+            "visibility": "private",
+            "row": 0,
+            "column": 0,
+            "created_by": 6150091802
+          },
+          {
+            "id": "4826e8fbea6a",
+            "type": "file",
+            "name": "SSC CGL TEST PAPER - 23 SOLUTION.pdf",
+            "file_id": "BQACAgUAAyEGAASQTtqMAAJMGmhY30350ek4VFjGtBTfpCfTsWzfAAJqGQACjZrAVpD5XCy-Gei4HgQ",
+            "caption": "SSC CGL TEST PAPER - 23 SOLUTION.pdf",
+            "visibility": "public",
+            "row": 1,
+            "column": 1,
+            "created_by": 6150091802
+          },
+          {
+            "id": "file_9fa963a5970e",
+            "type": "file",
+            "name": "SSC CGL TEST PAPER - 23 QUESTION.pdf",
+            "file_id": "BQACAgUAAyEGAASQTtqMAAJMGGhY3l01eCTwWQ-ENJmQF7fDkR1AAAJpGQACjZrAVj8qplAH9fThHgQ",
+            "caption": "SSC CGL TEST PAPER - 23 QUESTION.pdf",
+            "visibility": "private",
+            "row": 1,
+            "column": 2,
+            "created_by": 6150091802
+          },
+          {
+            "id": "a545f772f06d",
+            "type": "file",
+            "name": "SSC CGL TEST PAPER - 23 SOLUTION.pdf",
+            "file_id": "BQACAgUAAyEGAASQTtqMAAJMGWhY302zfdQZIQYIkNquFfdRnkEZAALaFwACjZrAVlTW462Kd_1kHgQ",
+            "caption": "SSC CGL TEST PAPER - 23 SOLUTION.pdf",
+            "visibility": "public",
+            "row": 2,
+            "column": 0,
+            "created_by": 6150091802
+          },
+          {
+            "id": "410bf8e5024d",
+            "type": "file",
+            "name": "Admob.json",
+            "file_id": "BQACAgUAAyEGAASQTtqMAAJMG2hY4fd1dr4jkqzforAYu9yT0Df4AAIwFQACmQHBVg6eoJb7K_90HgQ",
+            "caption": "Admob.json",
+            "visibility": "public",
+            "row": 2,
+            "column": 1,
+            "created_by": 6150091802
+          },
+          {
+            "id": "9f8b36b51b02",
+            "type": "file",
+            "name": "Only SSC",
+            "file_id": "BQACAgUAAyEGAASQTtqMAAJMHWhY-73ye-mk1aEuffyrckdAGBKvAAJpGQACjZrAVj8qplAH9fThHgQ",
+            "caption": "\u2705 \u092b\u093c\u093e\u0907\u0932 \u0938\u092b\u0932\u0924\u093e\u092a\u0942\u0930\u094d\u0935\u0915 \u0938\u0947\u0935 \u0939\u094b \u0917\u0908 \ud83d\udcc2",
+            "visibility": "public",
+            "row": 2,
+            "column": 2,
+            "created_by": 6150091802
+          },
+          {
+            "id": "3a226469138d",
+            "type": "file",
+            "name": "X Twitter v11.10.0 Modded by @Getmodpcs.apk",
+            "file_id": "BQACAgUAAyEGAASQTtqMAAJMJWhZIV0CuY2jAAE6KhPFO17sxQZMaAACERcAAmq_oFYy8CjFFk6mlB4E",
+            "caption": "@How_To_Install_This_Mod_Apk\n\n\ud83d\ude0d How To Login\n\nX Twitter v11.10.0 @Getmodpcs",
+            "visibility": "public",
+            "row": 3,
+            "column": 1,
+            "created_by": 6150091802
+          },
+          {
+            "id": "be4589b246ab",
+            "type": "file",
+            "name": "PhotoRoom Pro v2025.48.30",
+            "file_id": "BQACAgUAAyEGAASQTtqMAAJMI2hZIV3rMIZS8CSBXb9_WctdDrd3AAK0FgACar-gViFWXD5-3iBDHgQ",
+            "caption": "@How_To_Install_This_Mod_Apk\n\nPhotoRoom Pro v2025.48.30 @Getmodpcs",
+            "visibility": "public",
+            "row": 3,
+            "column": 3,
+            "created_by": 6150091802
+          },
+          {
+            "id": "144f307eb5d9",
+            "type": "file",
+            "name": "Hello Ram",
+            "file_id": "BQACAgUAAyEGAASQTtqMAAJMJGhZIV2SiWEkjj5_96cHLHXylRmcAALjFgACar-gVinx_lbpI8lhHgQ",
+            "caption": "@How_To_Install_This_Mod_Apk\n\nPicsart Pro Gold v29.1.0 @Getmodpcs",
+            "visibility": "public",
+            "row": 4,
+            "column": 1,
+            "created_by": 6150091802
+          },
+          {
+            "id": "6eb76c009c49",
+            "type": "file",
+            "name": "Picsart",
+            "file_id": "BQACAgUAAyEGAASQTtqMAAJMHmhY_FxsQanAGag2iovR2oVNqdhUAAJ5FAACtvfBVr6tLDX5dikuHgQ",
+            "caption": "Canta apk",
+            "visibility": "public",
+            "row": 4,
+            "column": 2,
+            "created_by": 6150091802
+          },
+          {
+            "id": "d9c5c36cd2f7",
+            "type": "file",
+            "sub_type": "photo",
+            "name": "Image",
+            "file_id": "AgACAgUAAyEGAASQTtqMAAJMPWhZUW-GVKobKFtD3c17R_IPCEfQAALiwjEbDPqpVjT6Z3p_2-zKAAgBAAMCAAN4AAceBA",
+            "caption": "Image",
+            "visibility": "public",
+            "row": 5,
+            "column": 0,
+            "created_by": 7733966632
+          }
+        ]
+      },
+      {
+        "id": "item_458ad7",
+        "name": "My Education Folder",
+        "description": "kb = generate_folder_keyboard(parent, int(user_id))",
+        "type": "folder",
+        "created_by": 6150091802,
+        "parent_id": "root",
+        "user_allow": [],
+        "items": [],
+        "row": 1,
+        "column": 0
+      },
+      {
+        "id": "webapp_cec9939b4a41",
+        "type": "webapp",
+        "name": "Web app",
+        "url": "https://tyu.me/aibots72",
+        "caption": "U",
+        "created_by": 7733966632,
+        "row": 2,
+        "column": 0
+      },
+      {
+        "id": "item_b387ff",
+        "name": "UPSC",
+        "description": "Welcome to UPSC Preparation",
+        "type": "folder",
+        "created_by": 6150091802,
+        "parent_id": "root",
+        "user_allow": [],
+        "items": [
+          {
+            "id": "8678dfa8ca5d",
+            "type": "file",
+            "sub_type": "document",
+            "name": "Udskjbjsodvjsf",
+            "file_id": "BQACAgUAAyEGAASQTtqMAAJMN2hZOSKzStwOYWDxaaC8GY6bWJXZAAL-FgACar-gVg4B8WPBXZO5HgQ",
+            "caption": "N kw vkhwdbdojshiovhsdubv",
+            "visibility": "public",
+            "row": 0,
+            "column": 0,
+            "created_by": 6150091802
+          },
+          {
+            "id": "cec7eaac455d",
+            "type": "file",
+            "sub_type": "photo",
+            "name": "Image",
+            "file_id": "AgACAgUAAyEGAASQTtqMAAJMO2hZOXjwh446t2gQblCZph-nvD3JAAI5yTEbDrHIVsY57_t_4X2iAAgBAAMCAAN4AAceBA",
+            "caption": "Faily Brakes v32.22 MOD APK [Unlocked all Cars/Unlimited Money]\n\n\u2705 Unlimited Coins\n\u2705 Unlocked All",
+            "visibility": "public",
+            "row": 0,
+            "column": 1,
+            "created_by": 6150091802
+          },
+          {
+            "id": "345da361b322",
+            "type": "file",
+            "sub_type": "photo",
+            "name": "Image",
+            "file_id": "AgACAgUAAyEGAASQTtqMAAJMOWhZOXjImdKLZu1HTJ7K532Y0WsHAAI1yTEbDrHIVq4XydNs_mvmAAgBAAMCAAN4AAceBA",
+            "caption": "CapCut v14.6.0 MOD APK [Full Pro] [Premium Unlocked] for Android",
+            "visibility": "public",
+            "row": 1,
+            "column": 0,
+            "created_by": 6150091802
+          },
+          {
+            "id": "8acd07961301",
+            "type": "file",
+            "sub_type": "photo",
+            "name": "Image",
+            "file_id": "AgACAgUAAyEGAASQTtqMAAJMOmhZOXishKK3gVaLpzB1hTUp13a-AAI3yTEbDrHIVkx8SXGiA7XfAAgBAAMCAAN4AAceBA",
+            "caption": "Easy Notes v1.3.16.0622 APK + MOD [Premium, VIP Unlocked]",
+            "visibility": "private",
+            "row": 1,
+            "column": 1,
+            "created_by": 6150091802
+          },
+          {
+            "id": "item_0a7bff",
+            "name": "Ghuiii",
+            "description": "Gio",
+            "type": "folder",
+            "created_by": 7733966632,
+            "parent_id": "item_b387ff",
+            "user_allow": [],
+            "items": [],
+            "row": 1,
+            "column": 2
+          },
+          {
+            "id": "item_1d452c",
+            "name": "Name",
+            "description": "Ui",
+            "type": "folder",
+            "created_by": 7733966632,
+            "parent_id": "item_b387ff",
+            "user_allow": [],
+            "items": [],
+            "row": 2,
+            "column": 0
+          },
+          {
+            "id": "webapp_a0bb6b1f18d1",
+            "type": "webapp",
+            "name": "/restart",
+            "url": "https://geetasaini2042.github.io/Results/",
+            "caption": "https://sainipankaj12.serv00.net/savepdf.php?url=https://sainipankaj12.serv00.net/Result/boardresult.php?tag=raj_12th_result&roll_no=1528881&year=2022&wb_id=88&source=3",
+            "created_by": 6150091802,
+            "row": 2,
+            "column": 1
+          },
+          {
+            "id": "item_55e515",
+            "name": "Hello",
+            "description": "Rtyi gjk jm j j n j",
+            "type": "folder",
+            "created_by": 6150091802,
+            "parent_id": "item_b387ff",
+            "user_allow": [],
+            "items": [],
+            "row": 2,
+            "column": 2
+          }
+        ],
+        "row": 2,
+        "column": 1
+      }
+    ]
+  }
+}

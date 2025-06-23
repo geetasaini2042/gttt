@@ -2,14 +2,10 @@ import os
 import json
 from pymongo import MongoClient
 from flask import Flask, request, jsonify
-# MongoDB Setup
-client = MongoClient("mongodb+srv://pankajsainikishanpura02:SHivxQzJdLrvbA9M@cluster0.tftxnvm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
-db = client["bot_database"]
-collection = db["bot_data_collection"]
-
+# 
 # File Path
 BOTES_DATA_FILE = "/opt/render/project/src/bot_data.json"
-
+MD_URI = os.getenv("MONGODB_URI")
 # Default structure (same as earlier)
 DEFAULT_JSON = {
     "data": {
@@ -26,8 +22,11 @@ DEFAULT_JSON = {
 def save_mongodb_data_to_file():
     try:
         # 1. Get data from MongoDB
+        #MongoDB Setup
+        client = MongoClient(MD_URI)
+        db = client["bot_database"]
+        collection = db["bot_data_collection"]
         db_data = collection.find_one({"data.id": "root"})
-        
         if db_data:
             if "_id" in db_data:
                 del db_data["_id"]  # Remove MongoDB ObjectId if exists

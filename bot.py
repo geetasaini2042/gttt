@@ -3,18 +3,24 @@ import os
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from script import app, run_flask, run_bot
-import callback_handler 
 import threading
-
+from common_data import data_file, users_file, status_user_file, temp_folder_file,temp_url_file,temp_webapp_file,temp_file_json
 # Define Admin IDs
 ADMINS = [6150091802, 2525267728]
-data_file = "/opt/render/project/src/bot_data.json"
-
-# Save user to users.json
 import json
 from typing import Union
+# Generate inline keyboard for root folder + admin buttons
+from collections import defaultdict
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-def load_bot_data(data_file: str = "/opt/render/project/src/bot_data.json") -> Union[dict, list, None]:
+from collections import defaultdict
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from collections import defaultdict
+import json
+
+def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
     try:
         with open(data_file, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -28,7 +34,7 @@ def load_bot_data(data_file: str = "/opt/render/project/src/bot_data.json") -> U
 
 def save_user(user_id: int):
     try:
-        with open("/opt/render/project/src/users.json", "r") as f:
+        with open(users_file, "r") as f:
             data = json.load(f)
             if isinstance(data, dict):
                 users = data.get("users", [])
@@ -40,23 +46,13 @@ def save_user(user_id: int):
     if user_id not in users:
         users.append(user_id)
 
-        with open("/opt/render/project/src/users.json", "w") as f:
+        with open(users_file, "w") as f:
             json.dump(users, f)
 
-# Generate inline keyboard for root folder + admin buttons
-from collections import defaultdict
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-from collections import defaultdict
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
-from collections import defaultdict
-import json
 
 def get_root_inline_keyboard(user_id: int):
     try:
-        with open("/opt/render/project/src/bot_data.json", "r") as f:
+        with open(data_file, "r") as f:
             root = json.load(f)["data"]
     except (FileNotFoundError, KeyError, json.JSONDecodeError):
         return InlineKeyboardMarkup([[InlineKeyboardButton("❌ No Data", callback_data="no_data")]])
@@ -72,17 +68,17 @@ def get_root_inline_keyboard(user_id: int):
         button = None
 
         if item["type"] == "folder":
-            icon = "📁"
+            icon = ""
             button = InlineKeyboardButton(f"{icon} {name}", callback_data=f"open:{item['id']}")
         elif item["type"] == "file":
-            icon = "📄"
+            icon = ""
             button = InlineKeyboardButton(f"{icon} {name}", callback_data=f"file:{item['id']}")
         elif item["type"] == "url":
-            icon = "🔗"
+            icon = ""
             url = item.get("url", "#")
             button = InlineKeyboardButton(f"{icon} {name}", url=url)
         elif item["type"] == "webapp":
-            icon = "🧩"
+            icon = ""
             url = item.get("url", "#")
             button = InlineKeyboardButton(f"{icon} {name}", web_app=WebAppInfo(url=url))
 
@@ -126,16 +122,64 @@ def get_root_inline_keyboard(user_id: int):
             buttons.append(user_buttons[i:i+2])
 
     return InlineKeyboardMarkup(buttons)
-@app.on_message(filters.command("start") & filters.private)
+
+@app.on_message(filters.command("start") & filters.regex(r"^/start$") & filters.private)
 async def start_handler(client, message: Message):
-    user_id = message.from_user.id
+    user = message.from_user
+    user_id = user.id
     save_user(user_id)
 
-    welcome_text = "👋 **Welcome to PDF Hub!**\n\nयहाँ से आप अपनी ज़रूरत की PDF फाइल्स पा सकते हैं। नीचे से फ़ोल्डर या फाइल चुनें:"
+    # ✅ Load bot_data
+    with open("/storage/emulated/0/BotBuilder/PYTHON/bot_data.json", "r") as f:
+        bot_data = json.load(f)
+
+    root = bot_data.get("data", {})
+    template = root.get("description", "👋 Welcome to **SingodiyaTech**!")
+
+    # 🔄 Replace placeholders with actual values
+    user_data = {
+        "first_name": user.first_name or "",
+        "last_name": user.last_name or "",
+        "full_name": f"{user.first_name or ''} {user.last_name or ''}".strip(),
+        "id": str(user.id),
+        "username": user.username or "",
+        "mention": f"[{user.first_name}](tg://user?id={user.id})",
+        "link": f"tg://user?id={user.id}"
+    }
+
+    for key, value in user_data.items():
+        template = template.replace(f"${{{key}}}", value)
+
+    welcome_text = template
     markup = get_root_inline_keyboard(user_id)
 
     await message.reply_text(welcome_text, reply_markup=markup)
+@app.on_message(filters.private & filters.command("restart"))
+async def handle_restart(client, message):
+    user_id = str(message.from_user.id)
 
+    files_to_clean = [
+        status_user_file,
+        temp_file_json,
+        temp_url_file,
+        temp_webapp_file,
+        temp_folder_file
+    ]
+
+    for file_path in files_to_clean:
+        try:
+            with open(file_path, "r") as f:
+                data = json.load(f)
+        except:
+            continue  # file not found or corrupted
+
+        if user_id in data:
+            data.pop(user_id, None)
+            with open(file_path, "w") as f:
+                json.dump(data, f, indent=2)
+
+    await message.reply("🔄 Your session has been reset. You can start fresh now.",reply_markup=get_root_inline_keyboard(user_id))
+import callback_handler 
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
