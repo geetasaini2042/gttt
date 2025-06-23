@@ -130,7 +130,7 @@ async def start_handler(client, message: Message):
     save_user(user_id)
 
     # ✅ Load bot_data
-    with open("/storage/emulated/0/BotBuilder/PYTHON/bot_data.json", "r") as f:
+    with open(data_file, "r") as f:
         bot_data = json.load(f)
 
     root = bot_data.get("data", {})

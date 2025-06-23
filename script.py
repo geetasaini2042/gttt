@@ -134,7 +134,7 @@ def run_bot():
 
 def get_created_by_from_folder(folder_id):
     try:
-        with open("/storage/emulated/0/BotBuilder/PYTHON/bot_data.json") as f:
+        with open(data_file) as f:
             bot_data = json.load(f)
     except:
         return None
@@ -154,7 +154,7 @@ def get_created_by_from_folder(folder_id):
 
 def is_user_action_allowed(folder_id, action):
     try:
-        with open("/storage/emulated/0/BotBuilder/PYTHON/bot_data.json") as f:
+        with open(data_file) as f:
             data = json.load(f)
     except:
         return False
