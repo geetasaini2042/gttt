@@ -1,5 +1,9 @@
 from pyrogram.filters import Filter
 import json
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from common_data import status_user_file
 
 class StatusFilter(Filter):
     def __init__(self, status_prefix):
@@ -9,7 +13,7 @@ class StatusFilter(Filter):
         user_id = str(message.from_user.id)
 
         try:
-            with open("/opt/render/project/src/status_user.json", "r") as f:
+            with open(status_user_file, "r") as f:
                 status_data = json.load(f)
         except:
             return False
