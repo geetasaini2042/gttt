@@ -4,24 +4,36 @@ from config import save_mongodb_data_to_file
 import os
 import json
 from pymongo import MongoClient
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify,abort
 from bson import json_util
-from common_data import data_file, API_ID, API_HASH,BOT_TOKEN, MD_URI
+from common_data import data_file, API_ID, API_HASH,BOT_TOKEN, MD_URI, BASE_PATH
 app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-DEFAULT_JSON = {
-    "data": {
-        "id": "root",
-        "name": "Root",
-        "description": "Welcome to PDF Hub.",
-        "type": "folder",
-        "created_by": 6150091802,
-        "parent_id": None,
-        "user_allow": [],
-        "items": []
-    }
-}
 
 flask_app = Flask(__name__)
+
+
+@flask_app.route("/get-file/<path:filename>")
+def get_json_file(filename):
+    # Ensure file ends with .json
+    if not filename.endswith(".json"):
+        return abort(400, "Only .json files are allowed.")
+
+    file_path = os.path.join(BASE_PATH, filename)
+
+    # Security: prevent path traversal (../../etc/passwd)
+    if not os.path.abspath(file_path).startswith(BASE_PATH):
+        return abort(403, "Access Denied.")
+
+    if not os.path.exists(file_path):
+        return abort(404, "File not found.")
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        return abort(500, f"Error reading file: {str(e)}")
+
 
 @flask_app.route("/upload-data", methods=["GET", "POST"])
 def handle_data():
@@ -127,11 +139,19 @@ def home():
 def run_flask():
     flask_app.run(host="0.0.0.0", port=5000)
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # यह .env फ़ाइल लोड करता है
+
 def run_bot():
-    save_mongodb_data_to_file()
+    is_termux = os.getenv("is_termux", "false").lower() == "true"
+
+    if not is_termux:
+        save_mongodb_data_to_file()
+
     app.run()
     print("Stopped\n")
-
 def get_created_by_from_folder(folder_id):
     try:
         with open(data_file) as f:

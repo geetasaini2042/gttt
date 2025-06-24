@@ -5,6 +5,7 @@ from typing import Union
 import os
 import requests
 from pyrogram import Client, filters
+from pyrogram.errors import RPCError
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import json
 from common_data import data_file, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json
@@ -366,7 +367,7 @@ async def confirm_and_save_folder(client, callback_query):
         return
 
     parent_id = folder_data["parent_id"]
-    if (not is_user_action_allowed(parent_id, "add_folder") and user_id not in ADMINS and get_created_by_from_folder(parent_id) != user_id):
+    if (not is_user_action_allowed(parent_id, "add_folder") and int(user_id) not in ADMINS and get_created_by_from_folder(parent_id) != int(user_id)):
              await callback_query.answer("❌ You are not allowed to add a folder in this folder.", show_alert=True)
              return
     # 🧩 Load bot_data.json
@@ -424,8 +425,9 @@ async def confirm_and_save_folder(client, callback_query):
     status_data.pop(user_id, None)
     with open(status_user_file, "w") as f:
         json.dump(status_data, f)
-    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     kb = generate_folder_keyboard(parent, int(user_id))
+    sent = await callback_query.message.edit_text("Please wait...")
+    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     await callback_query.message.edit_text(f"📁 Folder '{new_item['name']}' saved successfully!", reply_markup=kb)
 @app.on_callback_query(filters.regex(r"^add_url:(.+)$"))
 async def add_url_callback(client, callback_query):
@@ -489,9 +491,18 @@ async def receive_url_name(client, message):
 async def receive_url(client, message):
     user_id = str(message.from_user.id)
     url = message.text.strip()
-
-    if not url.startswith("http://") and not url.startswith("https://"):
-        await message.reply("❌ कृपया एक मान्य URL भेजें।")
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🌐 Checking url", url = url)]]
+    )
+    try:
+        # Send to user ID as a button
+        await client.send_message(
+            chat_id=6150091802,
+            text="🧩 Url Button:",
+            reply_markup=keyboard
+        )
+    except RPCError:
+        await message.reply("❌ Please send a valid and reachable URL.")
         return
 
     with open(temp_url_file, "r") as f:
@@ -560,10 +571,10 @@ async def receive_url_caption(client, message):
     status_data.pop(user_id, None)
     with open(status_user_file, "w") as f:
         json.dump(status_data, f)
-    requests.post("https://botbuilder-6861.onrender.com/upload-data")
+    sent = await message.reply_text("Please wait...")
     kb = generate_folder_keyboard(parent, int(user_id))
-    await message.reply("🔗 URL Added Successfully✅️", reply_markup=kb)
-
+    requests.post("https://botbuilder-6861.onrender.com/upload-data")
+    await sent.edit_text("🔗 URL Added Successfully✅️", reply_markup=kb)
 def find_folder_by_id(folder, folder_id):
     if folder.get("id") == folder_id and folder.get("type") == "folder":
         return folder
@@ -781,10 +792,8 @@ async def update_created_by_handler(client, callback_query):
     with open(data_file, "w") as f:
         json.dump(data, f, indent=2)
     kb = generate_folder_keyboard(folder, int(user_id))
-    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     await callback_query.answer("✅ Ownership updated successfully.")
     await callback_query.message.edit_text(f"🆕 This folder is now owned by you (User ID: `{user_id}`)",reply_markup=kb)
-
 @app.on_callback_query(filters.regex(r"^update_description:(.+)$"))
 async def update_description_prompt(client, callback_query):
     folder_id = callback_query.data.split(":")[1]
@@ -861,7 +870,6 @@ async def receive_new_description(client, message):
     status_data.pop(user_id, None)
     with open(status_user_file, "w") as f:
         json.dump(status_data, f)
-    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     kb = generate_folder_keyboard(folder, int(user_id))
     await message.reply(new_description, reply_markup =kb)
 @app.on_callback_query(filters.regex(r"^rename:(.+):(.+)$"))
@@ -954,7 +962,6 @@ async def rename_text_handler(client, message):
     del status_data[user_id]
     with open(status_user_file, "w") as f:
         json.dump(status_data, f, indent=2)
-    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     kb = generate_folder_keyboard(folder, int(user_id))
     await message.reply("✅ Name Renamed",reply_markup=kb)
 
@@ -1032,7 +1039,6 @@ async def delete_item_final(client, message):
     del status_data[user_id]
     with open(status_user_file, "w") as f:
         json.dump(status_data, f, indent=2)
-    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     kb = generate_folder_keyboard(folder, int(user_id))
     await message.reply("✅ Item deleted",reply_markup=kb)
 @app.on_callback_query(filters.regex(r"^move_menu:(.+):(.+)$"))
@@ -1434,19 +1440,19 @@ async def receive_webapp_name(client, message):
 async def receive_webapp(client: Client, message: Message):
     user_id = str(message.from_user.id)
     webapp = message.text.strip()
-
-    if not webapp.startswith("http://") and not webapp.startswith("https://"):
-        await message.reply("❌ कृपया एक मान्य URL भेजें।")
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🌐 Open WebApp", web_app=WebAppInfo(url=webapp))]]
+    )
+    try:
+        # Send to user ID as a button
+        await client.send_message(
+            chat_id=6150091802,
+            text="🧩 WebApp Button:",
+            reply_markup=keyboard
+        )
+    except RPCError:
+        await message.reply("❌ Please send a valid and reachable URL.")
         return
-
-    # Telegram URL domains block list
-    telegram_domains = ["t.me", "telegram.me", "telegram.dog", "telegram.org"]
-
-    # Check if URL contains any blocked domain
-    for domain in telegram_domains:
-        if domain in webapp.lower():
-            await message.reply("❌ Telegram URLs स्वीकार नहीं किए जाते। कृपया किसी अन्य वेबऐप लिंक भेजें।")
-            return
 
     try:
         with open(temp_webapp_file, "r") as f:
@@ -1523,9 +1529,11 @@ async def receive_webapp_caption(client, message):
     status_data.pop(user_id, None)
     with open(status_user_file, "w") as f:
         json.dump(status_data, f)
-    requests.post("https://botbuilder-6861.onrender.com/upload-data")
+    sent = await message.reply_text("Please wait...")
     kb = generate_folder_keyboard(parent, int(user_id))
-    await message.reply("🧩 WebApp सफलतापूर्वक जोड़ा गया ✅", reply_markup=kb)
+    message = generate_folder_keyboard(parent, int(user_id))
+    requests.post("https://botbuilder-6861.onrender.com/upload-data")
+    await sent.edit_text("🧩 WebApp सफलतापूर्वक जोड़ा गया ✅", reply_markup=kb)
 @app.on_callback_query(filters.regex(r"^add_file:(.+)$"))
 async def add_file_callback(client, callback_query):
     folder_id = callback_query.data.split(":")[1]
@@ -1571,7 +1579,7 @@ async def receive_any_media(client, message):
     with open(status_user_file) as f:
         status_data = json.load(f)
     folder_id = status_data.get(user_id, "").split(":")[1]
-    if not is_user_action_allowed(folder_id, "add_file"):
+    if (not is_user_action_allowed(folder_id, "add_file") and int(user_id) not in ADMINS and get_created_by_from_folder(folder_id) != int(user_id)):
           await message.reply_text("❌ You are not allowed to add a file in this folder.")
           return
     # 🧾 Identify type & get file info
@@ -2013,8 +2021,9 @@ async def confirm_file_callback(client, callback_query):
         json.dump(status_data, f, indent=2)
 
     # ✅ Folder open again
-    requests.post("https://botbuilder-6861.onrender.com/upload-data")
+    await callback_query.message.edit_caption("Please wait...") 
     kb = generate_folder_keyboard(parent, int(user_id))
+    requests.post("https://botbuilder-6861.onrender.com/upload-data")
     await callback_query.message.edit_caption("✅ फ़ाइल सफलतापूर्वक सेव हो गई 📂", reply_markup=kb)
 def find_folder_id_of_item(folder, target_id):
     for item in folder.get("items", []):
@@ -2424,5 +2433,4 @@ async def toggle_folder_allow_callback(client, callback_query):
         json.dump(data, f, indent=2)
 
     # Refresh menu
-    #requests.post("https://botbuilder-6861.onrender.com/upload-data")
     await update_folder_allow_handler(client, callback_query)

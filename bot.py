@@ -4,7 +4,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from script import app, run_flask, run_bot
 import threading
-from common_data import data_file, users_file, status_user_file, temp_folder_file,temp_url_file,temp_webapp_file,temp_file_json
+from common_data import data_file, users_file, status_user_file, temp_folder_file,temp_url_file,temp_webapp_file,temp_file_json, DEFAULT_JSON
 # Define Admin IDs
 ADMINS = [6150091802, 2525267728]
 import json
@@ -19,18 +19,6 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from collections import defaultdict
 import json
-
-def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
-    try:
-        with open(data_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print(f"❌ File not found: {data_file}")
-    except json.JSONDecodeError:
-        print(f"❌ Invalid JSON in file: {data_file}")
-    except Exception as e:
-        print(f"⚠ Unexpected error: {e}")
-    return None
 
 def save_user(user_id: int):
     try:
@@ -53,7 +41,13 @@ def save_user(user_id: int):
 def get_root_inline_keyboard(user_id: int):
     try:
         with open(data_file, "r") as f:
-            root = json.load(f)["data"]
+            content = f.read().strip()
+            if content == "{}":
+                with open(data_file, "w") as wf:
+                    json.dump(DEFAULT_JSON, wf, indent=2)
+                root = DEFAULT_JSON["data"]
+            else:
+                root = json.loads(content)["data"]
     except (FileNotFoundError, KeyError, json.JSONDecodeError):
         return InlineKeyboardMarkup([[InlineKeyboardButton("❌ No Data", callback_data="no_data")]])
 
@@ -129,10 +123,11 @@ async def start_handler(client, message: Message):
     user_id = user.id
     save_user(user_id)
 
-    # ✅ Load bot_data
-    with open(data_file, "r") as f:
-        bot_data = json.load(f)
-
+    try :
+       with open(data_file, "r") as f:
+           bot_data = json.load(f)
+    except (FileNotFoundError, KeyError, json.JSONDecodeError):
+        bot_data = DEFAULT_JSON
     root = bot_data.get("data", {})
     template = root.get("description", "👋 Welcome to **SingodiyaTech**!")
 
