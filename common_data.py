@@ -6,6 +6,7 @@ API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MD_URI = os.getenv("MONGODB_URI")
 WELCOME_MSG = os.getenv("WELCOME_MSG")
+DEPLOY_URL = os.getenv("URL")
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 data_file = os.path.join(BASE_PATH, "bot_data.json")
 status_user_file = os.path.join(BASE_PATH, "status_user.json")
@@ -18,7 +19,7 @@ DEFAULT_JSON = {
     "data": {
         "id": "root",
         "name": "Root",
-        "description": "Welcome to PDF Hub.",
+        "description": "Welcome to Singodiya Tech!",
         "type": "folder",
         "created_by": 6150091802,
         "parent_id": None,

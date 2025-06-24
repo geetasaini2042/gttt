@@ -7,6 +7,7 @@ from pymongo import MongoClient
 from flask import Flask, request, jsonify,abort
 from bson import json_util
 from common_data import data_file, API_ID, API_HASH,BOT_TOKEN, MD_URI, BASE_PATH
+import requests 
 app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 flask_app = Flask(__name__)
@@ -149,8 +150,9 @@ def run_bot():
 
     if not is_termux:
         save_mongodb_data_to_file()
-
     app.run()
+    if not is_termux:
+      requests.post("https://botbuilder-6861.onrender.com/upload-data")
     print("Stopped\n")
 def get_created_by_from_folder(folder_id):
     try:
