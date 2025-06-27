@@ -156,7 +156,7 @@ def generate_folder_keyboard(folder: dict, user_id: int):
     # ⬅️ Back
     parent_id = folder.get("parent_id")
     if parent_id:
-        sorted_rows.append([InlineKeyboardButton("⬅️ Back", callback_data=f"open:{parent_id}")])
+        sorted_rows.append([InlineKeyboardButton("🔙 Back", callback_data=f"open:{parent_id}")])
 
     return InlineKeyboardMarkup(sorted_rows)
 def find_folder_by_id(current_folder: dict, target_id: str):
@@ -1568,7 +1568,7 @@ async def add_file_callback(client, callback_query):
     with open(temp_file_json, "w") as f:
         json.dump(temp_data, f, indent=2)
 
-    await callback_query.message.edit_text("📎 कृपया एक या अधिक फ़ाइलें (documents) भेजें।")
+    await callback_query.message.edit_text("Please Send me some Files..")
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 @app.on_message(filters.private & StatusFilter("waiting_file_doc") & (filters.document | filters.video | filters.audio | filters.photo))
