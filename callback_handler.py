@@ -153,10 +153,10 @@ def generate_folder_keyboard(folder: dict, user_id: int):
             InlineKeyboardButton("✏️ Edit Folder Layout", callback_data=f"edit1_item1:{folder_id}")
         ])
 
-    # ⬅️ Back
+    # 🔙Back
     parent_id = folder.get("parent_id")
     if parent_id:
-        sorted_rows.append([InlineKeyboardButton("🔙 Back", callback_data=f"open:{parent_id}")])
+        sorted_rows.append([InlineKeyboardButton("🔙Back", callback_data=f"open:{parent_id}")])
 
     return InlineKeyboardMarkup(sorted_rows)
 def find_folder_by_id(current_folder: dict, target_id: str):
@@ -641,7 +641,7 @@ async def edit_menu_handler(client, callback_query):
 
     # 🔙 Back button
     buttons.append([
-        InlineKeyboardButton("⬅️ Back", callback_data=f"edit1_item1:{folder_id}")
+        InlineKeyboardButton("🔙Back", callback_data=f"edit1_item1:{folder_id}")
     ])
 
     await callback_query.message.edit_text(
@@ -688,11 +688,12 @@ async def edit_item_handler(client, callback_query):
 
     # 🧰 Show edit options
     buttons = [
-        [InlineKeyboardButton("✏️ Rename", callback_data=f"rename:{folder_id}:{item_id}")],
-        [InlineKeyboardButton("🔀 Move", callback_data=f"move_menu:{folder_id}:{item_id}")],
-        [InlineKeyboardButton("🗑 Delete", callback_data=f"delete:{folder_id}:{item_id}")],
-        [InlineKeyboardButton("⬅️ Back", callback_data=f"edit_menu:{folder_id}")]
-    ]
+    [InlineKeyboardButton("✏️ Rename", callback_data=f"rename:{folder_id}:{item_id}")],
+    [InlineKeyboardButton("🔀 Move", callback_data=f"move_menu:{folder_id}:{item_id}")],
+    [InlineKeyboardButton("📄 Copy", callback_data=f"copy_item:{folder_id}:{item_id}")],
+    [InlineKeyboardButton("🗑 Delete", callback_data=f"delete:{folder_id}:{item_id}")],
+    [InlineKeyboardButton("🔙Back", callback_data=f"edit_menu:{folder_id}")]
+]
 
     await callback_query.message.edit_text(
         f"🧩 Edit Options for: {item.get('name', 'Unnamed')}",
@@ -731,7 +732,7 @@ async def edit1_item1_handler(client, callback_query):
             InlineKeyboardButton("📝 Description", callback_data=f"update_description:{folder_id}")],
             [InlineKeyboardButton("🔻Edit Allow", callback_data=f"update_folder_allow:{folder_id}")],
             [InlineKeyboardButton("👑 Take Ownership", callback_data=f"update_created_by:{folder_id}")],
-            [InlineKeyboardButton("⬅️ Back", callback_data=f"open:{folder_id}")]
+            [InlineKeyboardButton("🔙Back", callback_data=f"open:{folder_id}")]
         ]
     else:
        item_id = default_item["id"]
@@ -742,7 +743,7 @@ async def edit1_item1_handler(client, callback_query):
         [InlineKeyboardButton("🔀 Move", callback_data=f"move_menu:{folder_id}:{item_id}"),
         InlineKeyboardButton("🔻Edit Allow", callback_data=f"update_folder_allow:{folder_id}")],
         [InlineKeyboardButton("👑 Take Ownership", callback_data=f"update_created_by:{folder_id}")],
-        [InlineKeyboardButton("⬅️ Back", callback_data=f"open:{folder_id}")]
+        [InlineKeyboardButton("🔙Back", callback_data=f"open:{folder_id}")]
     ]
 
     await callback_query.message.edit_text(
@@ -1568,7 +1569,7 @@ async def add_file_callback(client, callback_query):
     with open(temp_file_json, "w") as f:
         json.dump(temp_data, f, indent=2)
 
-    await callback_query.message.edit_text("Please Send me some Files..")
+    await callback_query.message.edit_text("📎 कृपया एक या अधिक फ़ाइलें (documents) भेजें।")
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 @app.on_message(filters.private & StatusFilter("waiting_file_doc") & (filters.document | filters.video | filters.audio | filters.photo))
@@ -2338,7 +2339,7 @@ async def toggle_file_visibility(client, callback_query):
     buttons = [
         [InlineKeyboardButton(f"👁 Visibility: {new_visibility}", callback_data=f"toggle_file_visibility:{file_uuid}")],
         [InlineKeyboardButton("📝 Edit Caption", callback_data=f"file_caption_editing:{file_uuid}")],
-        [InlineKeyboardButton("⬅️ Back", callback_data=f"open:{parent_folder['id']}")]
+        [InlineKeyboardButton("🔙Back", callback_data=f"open:{parent_folder['id']}")]
     ]
 
     await callback_query.message.edit_text(
@@ -2389,7 +2390,7 @@ async def update_folder_allow_handler(client, callback_query):
         ])
 
     # Back button
-    buttons.append([InlineKeyboardButton("⬅️ Back", callback_data=f"edit1_item1:{folder_id}")])
+    buttons.append([InlineKeyboardButton("🔙Back", callback_data=f"edit1_item1:{folder_id}")])
 
     await callback_query.message.edit_text(
         "🔧 Select what users are allowed to add in this folder:",
@@ -2434,3 +2435,190 @@ async def toggle_folder_allow_callback(client, callback_query):
 
     # Refresh menu
     await update_folder_allow_handler(client, callback_query)
+
+@app.on_callback_query(filters.regex(r"^copy_item:(.+):(.+)$"))
+async def copy_item_start(client, callback_query):
+    folder_id, item_id = callback_query.data.split(":")[1:]
+    user_id = str(callback_query.from_user.id)
+
+    with open(data_file, "r") as f:
+        data = json.load(f)
+
+    folder = find_folder_by_id(data["data"], folder_id)
+    if not folder:
+        await callback_query.answer("❌ Folder not found", show_alert=True)
+        return
+
+    # Save status
+    with open(status_user_file, "r") as f:
+        status = json.load(f)
+
+    status[user_id] = {
+        "status": f"copying_item:{item_id}",
+        "current_folder": folder_id,
+        "target_folder": folder_id
+    }
+
+    with open(status_user_file, "w") as f:
+        json.dump(status, f, indent=2)
+
+    await show_copy_folder_navigation(client, callback_query.message, item_id, folder_id)
+async def show_copy_folder_navigation(client, message, item_id, folder_id):
+    with open(data_file, "r") as f:
+        data = json.load(f)
+
+    folder = find_folder_by_id(data["data"], folder_id)
+    if not folder:
+        await message.edit_text("❌ Folder not found.")
+        return
+
+    buttons = []
+
+    # subfolders only
+    for sub in folder.get("items", []):
+        if sub.get("type") == "folder":
+            buttons.append([
+                InlineKeyboardButton(
+                    f"📁 {sub['name']}",
+                    callback_data=f"copy_navigate:{item_id}:{sub['id']}"
+                )
+            ])
+
+    # bottom control
+    controls = [
+        InlineKeyboardButton("🔙Back", callback_data=f"copy_back:{item_id}"),
+        InlineKeyboardButton("❌ Cancel", callback_data="copy_cancel"),
+        InlineKeyboardButton("✅ Done", callback_data=f"copy_done:{folder_id}:{item_id}")
+    ]
+    buttons.append(controls)
+
+    await message.edit_text(
+        f"📂 **Select target folder:**\n\n*Current*: {folder.get('name')}",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+@app.on_callback_query(filters.regex(r"^copy_navigate:(.+):(.+)$"))
+async def copy_navigate(client, callback_query):
+    item_id, folder_id = callback_query.data.split(":")[1:]
+    user_id = str(callback_query.from_user.id)
+
+    # update status
+    with open(status_user_file, "r") as f:
+        status = json.load(f)
+
+    if user_id in status:
+        status[user_id]["current_folder"] = folder_id
+        status[user_id]["target_folder"] = folder_id
+
+    with open(status_user_file, "w") as f:
+        json.dump(status, f, indent=2)
+
+    await show_copy_folder_navigation(client, callback_query.message, item_id, folder_id)
+    
+@app.on_callback_query(filters.regex(r"^copy_back:(.+)$"))
+async def copy_back(client, callback_query):
+    item_id = callback_query.data.split(":")[1]
+    user_id = str(callback_query.from_user.id)
+
+    with open(status_user_file, "r") as f:
+        status = json.load(f)
+
+    current_folder = status[user_id].get("current_folder")
+
+    with open(data_file, "r") as f:
+        data = json.load(f)
+
+    parent_folder = find_parent_folder(data["data"], current_folder)
+    if not parent_folder:
+        await callback_query.answer("🚫 Already at root", show_alert=True)
+        return
+
+    status[user_id]["current_folder"] = parent_folder["id"]
+    status[user_id]["target_folder"] = parent_folder["id"]
+
+    with open(status_user_file, "w") as f:
+        json.dump(status, f, indent=2)
+
+    await show_copy_folder_navigation(client, callback_query.message, item_id, parent_folder["id"])
+@app.on_callback_query(filters.regex(r"^copy_cancel$"))
+async def copy_cancel(client, callback_query):
+    user_id = str(callback_query.from_user.id)
+    with open(status_user_file, "r") as f:
+        status = json.load(f)
+    status.pop(user_id, None)
+    with open(status_user_file, "w") as f:
+        json.dump(status, f, indent=2)
+
+    await callback_query.message.edit_text("❌ Copy cancelled.")
+@app.on_callback_query(filters.regex(r"^copy_done:(.+):(.+)$"))
+async def copy_done_handler(client, callback_query):
+    dest_folder_id, item_id = callback_query.data.split(":")[1:]
+    user_id = str(callback_query.from_user.id)
+
+    # Load
+    with open(data_file, "r") as f:
+        data = json.load(f)
+
+    root = data.get("data", {})
+
+    # Find source item
+    item_to_copy = find_item_by_id(root, item_id)
+    if not item_to_copy:
+        await callback_query.answer("❌ Item not found", show_alert=True)
+        return
+
+    # Find destination folder
+    dest_folder = find_folder_by_id(root, dest_folder_id)
+    if not dest_folder:
+        await callback_query.answer("❌ Destination folder not found", show_alert=True)
+        return
+
+    import uuid
+
+    # Recursive deep copy with new ids and correct parent_id
+    def deep_copy(item, new_parent_id):
+        new_item = item.copy()
+        new_item["id"] = uuid.uuid4().hex[:12]
+        new_item["created_by"] = user_id
+        new_item["parent_id"] = new_parent_id  # <-- update parent id
+
+        if new_item.get("type") == "folder":
+            children = []
+            for child in item.get("items", []):
+                copied_child = deep_copy(child, new_item["id"])  # assign new id as parent
+                children.append(copied_child)
+            new_item["items"] = children
+
+        return new_item
+
+    # Copy the outer
+    copied = deep_copy(item_to_copy, dest_folder_id)
+
+    # Set row/column only for outer
+    existing_rows = [i.get("row", 0) for i in dest_folder.get("items", [])]
+    copied["row"] = max(existing_rows, default=-1) + 1
+    copied["column"] = 0
+
+    dest_folder.setdefault("items", []).append(copied)
+
+    # Save
+    with open(data_file, "w") as f:
+        json.dump(data, f, indent=2)
+
+    await callback_query.answer("✅ Copied successfully")
+    await callback_query.message.edit_text("Please Wait...")
+    requests.post(DEPLOY_URL)
+    markup = generate_folder_keyboard(dest_folder, user_id)
+    await callback_query.message.edit_text(
+        "✅ Copied successfully!",
+        reply_markup=markup
+    )
+def find_parent_folder(root, child_id):
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        for item in node.get("items", []):
+            if item.get("id") == child_id:
+                return node
+            if item.get("type") == "folder":
+                stack.append(item)
+    return None
