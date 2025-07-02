@@ -1,6 +1,6 @@
 from pyrogram import Client
 import os
-from config import save_mongodb_data_to_file ,find_parent_of_parent,save_mongodb_users_to_file()
+from config import save_mongodb_data_to_file ,find_parent_of_parent,save_mongodb_users_to_file
 import os
 import json
 from pymongo import MongoClient
