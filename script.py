@@ -1,12 +1,12 @@
 from pyrogram import Client
 import os
-from config import save_mongodb_data_to_file
+from config import save_mongodb_data_to_file ,find_parent_of_parent
 import os
 import json
 from pymongo import MongoClient
 from flask import Flask, request, jsonify,abort
 from bson import json_util
-from common_data import data_file, API_ID, API_HASH,BOT_TOKEN, MD_URI, BASE_PATH
+from common_data import data_file,data_file1, API_ID, API_HASH,BOT_TOKEN, MD_URI, BASE_PATH,DEPLOY_URL,users_file
 import requests 
 app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -35,53 +35,113 @@ def get_json_file(filename):
     except Exception as e:
         return abort(500, f"Error reading file: {str(e)}")
 
+@flask_app.route("/upload-users", methods=["POST"])
+def upload_users():
+    try:
+        # MongoDB
+        client = MongoClient(MD_URI)
+        db = client["bot_database"]
+        users_collection = db["users_collection"]
 
+        # load local file
+        with open(users_file, "r") as f:
+            users_data = json.load(f)
+
+        # save to MongoDB
+        result = users_collection.update_one(
+            {"type": "userlist"},
+            {"$set": {"type": "userlist", "users": users_data}},
+            upsert=True
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": "users.json data saved to MongoDB",
+            "matched_count": result.matched_count,
+            "modified_count": result.modified_count,
+            "upserted_id": str(result.upserted_id) if result.upserted_id else None
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": "Failed to upload users.json to MongoDB", "error": str(e)}), 500
 @flask_app.route("/upload-data", methods=["GET", "POST"])
 def handle_data():
-    # File check and creation if not exists
+    # MongoDB client
     client = MongoClient(MD_URI)
     db = client["bot_database"]
-    collection = db["bot_data_collection"]
+    collection1 = db["bot_data_collection"]   # for data_file
+    collection2 = db["bot_data_collection_1"] # for data_file1
+
+    # Files check and create if missing
     if not os.path.exists(data_file):
         with open(data_file, "w") as f:
             json.dump(DEFAULT_JSON, f, indent=2)
 
-    # Load data from file
+    if not os.path.exists(data_file1):
+        with open(data_file1, "w") as f:
+            json.dump(DEFAULT_JSON, f, indent=2)
+
+    # Load both files
     try:
         with open(data_file, "r") as f:
             file_data = json.load(f)
     except Exception as e:
-        return jsonify({"status": "error", "message": "Failed to read local JSON", "error": str(e)}), 500
+        return jsonify({"status": "error", "message": "Failed to read local JSON (data_file)", "error": str(e)}), 500
+
+    try:
+        with open(data_file1, "r") as f:
+            file_data1 = json.load(f)
+    except Exception as e:
+        return jsonify({"status": "error", "message": "Failed to read local JSON (data_file1)", "error": str(e)}), 500
 
     if request.method == "GET":
-        # Try to get from MongoDB
         try:
-            db_data = collection.find_one({"data.id": "root"})
-            if db_data:
-                db_data["_id"] = str(db_data["_id"])  # Convert ObjectId to str
-                return jsonify({"status": "success", "source": "mongodb", "data": db_data})
-            else:
-                return jsonify({"status": "success", "source": "file", "data": file_data})
+            db_data1 = collection1.find_one({"data.id": "root"})
+            db_data2 = collection2.find_one({"data.id": "root"})
+
+            # convert ObjectIds to string
+            if db_data1:
+                db_data1["_id"] = str(db_data1["_id"])
+            if db_data2:
+                db_data2["_id"] = str(db_data2["_id"])
+
+            return jsonify({
+                "status": "success",
+                "source": "mongodb",
+                "data_file": db_data1 if db_data1 else file_data,
+                "data_file1": db_data2 if db_data2 else file_data1
+            })
         except Exception as e:
             return jsonify({"status": "error", "message": "MongoDB fetch failed", "error": str(e)}), 500
 
     elif request.method == "POST":
-        # Save to MongoDB
         try:
-            result = collection.update_one(
+            result1 = collection1.update_one(
                 {"data.id": file_data["data"]["id"]},
                 {"$set": file_data},
+                upsert=True
+            )
+            result2 = collection2.update_one(
+                {"data.id": file_data1["data"]["id"]},
+                {"$set": file_data1},
                 upsert=True
             )
             return jsonify({
                 "status": "success",
                 "message": "Data saved to MongoDB",
-                "matched_count": result.matched_count,
-                "modified_count": result.modified_count,
-                "upserted_id": str(result.upserted_id) if result.upserted_id else None
+                "data_file": {
+                    "matched_count": result1.matched_count,
+                    "modified_count": result1.modified_count,
+                    "upserted_id": str(result1.upserted_id) if result1.upserted_id else None
+                },
+                "data_file1": {
+                    "matched_count": result2.matched_count,
+                    "modified_count": result2.modified_count,
+                    "upserted_id": str(result2.upserted_id) if result2.upserted_id else None
+                }
             })
         except Exception as e:
             return jsonify({"status": "error", "message": "MongoDB insert failed", "error": str(e)}), 500
+
 @flask_app.route("/save-to-mongodb-from-file", methods=["GET"])
 def save_to_mongodb():
     try:
@@ -134,6 +194,7 @@ def get_all_data():
 
 @flask_app.route("/")
 def home():
+    upload_users()
     return "Flask server is running."
 
 
@@ -149,10 +210,12 @@ def run_bot():
     is_termux = os.getenv("is_termux", "false").lower() == "true"
 
     if not is_termux:
+        save_mongodb_users_to_file()
         save_mongodb_data_to_file()
     app.run()
     if not is_termux:
-      requests.post("https://botbuilder-6861.onrender.com/upload-data")
+      requests.post(DEPLOY_URL)
+      upload_users()
     print("Stopped\n")
 def get_created_by_from_folder(folder_id):
     try:
