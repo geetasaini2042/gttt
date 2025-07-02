@@ -271,7 +271,7 @@ def build_inline_keyboard(items: list, user_id: int, current_folder: dict) -> In
 
         for i in range(0, len(user_buttons), 2):
             buttons.append(user_buttons[i:i+2])
-
+  
     return InlineKeyboardMarkup(buttons)
 def set_user_status(user_id: int, status: str):
     try:
@@ -368,7 +368,10 @@ async def handle_any_command(client, message: Message):
         description = description.replace(f"${{{key}}}", value)
 
     markup = build_inline_keyboard(items, user_id, found)
-    await message.reply_text(description, reply_markup=markup)
+    try:
+        await message.reply_text(description, reply_markup=markup)
+    except Exception:
+        await message.reply_text(description)
 
 
 def save_commands_data(data):
