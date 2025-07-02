@@ -1,6 +1,6 @@
 from pyrogram import Client
 import os
-from config import save_mongodb_data_to_file ,find_parent_of_parent
+from config import save_mongodb_data_to_file ,find_parent_of_parent,save_mongodb_users_to_file()
 import os
 import json
 from pymongo import MongoClient
@@ -9,7 +9,12 @@ from bson import json_util
 from common_data import data_file,data_file1, API_ID, API_HASH,BOT_TOKEN, MD_URI, BASE_PATH,DEPLOY_URL,users_file
 import requests 
 app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+    # You can add filename='log.txt' if you want to save logs in a file
+)
 flask_app = Flask(__name__)
 
 
@@ -216,7 +221,7 @@ def run_bot():
     if not is_termux:
       requests.post(DEPLOY_URL)
       upload_users()
-    print("Stopped\n")
+    logging.info("Stopped\n")
 def get_created_by_from_folder(folder_id):
     try:
         with open(data_file) as f:
