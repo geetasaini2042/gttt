@@ -36,8 +36,7 @@ def save_user(user_id: int):
             json.dump(users, f)
 
 def escape_markdown(text: str) -> str:
-    escape_chars = r"\_*[]()~`>#+-=|{}.!"
-    return "".join("\\" + c if c in escape_chars else c for c in text)
+    return text
 
 def get_root_inline_keyboard(user_id: int):
     try:
