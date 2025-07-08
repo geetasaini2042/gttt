@@ -45,8 +45,7 @@ def load_bot_data(data_file1: str = data_file1) -> Union[dict, list, None]:
         print(f"⚠ Unexpected error: {e}")
     return None
 def escape_markdown(text: str) -> str:
-    escape_chars = r"\_*[]()~`>#+-=|{}.!"
-    return "".join("\\" + c if c in escape_chars else c for c in text)
+    return text
 
 @app.on_callback_query(filters.regex("^open1:"))
 async def open_folder_handler(client, callback_query):
