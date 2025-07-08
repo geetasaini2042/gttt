@@ -849,9 +849,7 @@ async def update_description_prompt(client, callback_query):
 from pyrogram import filters
 
 def escape_markdown(text: str) -> str:
-    escape_chars = r"\_*[]()~`>#+-=|{}.!"
-    return "".join("\\" + c if c in escape_chars else c for c in text)
-
+    return text
 @app.on_message(filters.private & filters.text & StatusFilter("updating_description"))
 async def receive_new_description(client, message):
     user_id = str(message.from_user.id)
