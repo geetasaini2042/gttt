@@ -3,14 +3,75 @@ import json
 import logging
 from pymongo import MongoClient
 from flask import Flask, request, jsonify
-from common_data import data_file,data_file1, MD_URI, DEFAULT_JSON,users_file
+from common_data import data_file,data_file1, MD_URI, DEFAULT_JSON,users_file,BOT_TOKEN,REQUIRED_CHANNELS,OWNER 
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
     # You can add filename='log.txt' if you want to save logs in a file
 )
+import os
+import requests
 
+
+def is_user_subscribed_requests(user_id):
+    if not REQUIRED_CHANNELS.strip():
+        return True
+
+    channels = [ch.strip() for ch in REQUIRED_CHANNELS.split(",") if ch.strip()]
+    if not channels:
+        return True
+
+    for channel in channels:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/getChatMember"
+        params = {
+            "chat_id": channel,
+            "user_id": user_id
+        }
+
+        try:
+            res = requests.get(url, params=params)
+            data = res.json()
+
+            if not data.get("ok"):
+                # ❗️Notify OWNER to add bot
+                try:
+                    notify_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                    text = f"❗️ Please add me to channel: {channel}"
+                    requests.get(notify_url, params={"chat_id": OWNER, "text": text})
+                except Exception as notify_err:
+                    print("⚠️ Failed to notify owner:", notify_err)
+
+                continue  # skip this channel but do not block user
+
+            status = data["result"]["status"]
+            if status in ["left", "kicked"]:
+                return False  # user not subscribed
+
+        except Exception as e:
+            print(f"❌ Exception checking {channel}:", e)
+            continue
+
+    return True
+    
+def get_channel_invite_link(channel_id):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/exportChatInviteLink"
+    params = {
+        "chat_id": channel_id
+    }
+
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+
+        if data.get("ok"):
+            return data["result"]  # ✅ Invite link
+        else:
+            print("❌ Error:", data.get("description"))
+            return None
+    except Exception as e:
+        print("❌ Exception:", e)
+        return None
 def save_mongodb_users_to_file():
     try:
         # MongoDB

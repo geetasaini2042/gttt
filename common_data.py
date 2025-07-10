@@ -4,6 +4,7 @@ load_dotenv()
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+REQUIRED_CHANNELS = os.getenv("REQUIRED_CHANNELS", "")  # comma-separated
 MD_URI = os.getenv("MONGODB_URI")
 DEPLOY_URL = os.getenv("URL", "http://127.0.0.1:5000/upload-data")
 OWNER = int(os.getenv("OWNER", 6150091802))
