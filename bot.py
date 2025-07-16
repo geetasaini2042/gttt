@@ -185,7 +185,7 @@ async def start_handler(client, message: Message):
 @app.on_message(filters.private & filters.command("restart"))
 async def handle_restart(client, message):
     user_id = str(message.from_user.id)
-    from common_data import is_user_subscribed_requests, REQUIRED_CHANNELS
+    from common_data import REQUIRED_CHANNELS
     if not is_user_subscribed_requests(user_id):
         buttons = []
 
