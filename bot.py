@@ -229,7 +229,8 @@ async def handle_restart(client, message):
             data.pop(user_id, None)
             with open(file_path, "w") as f:
                 json.dump(data, f, indent=2)
-
+    user = message.from_user
+    user_id = user.id
     await message.reply("🔄 Your session has been reset. You can start fresh now.",reply_markup=get_root_inline_keyboard(user_id))
 
 import admins
