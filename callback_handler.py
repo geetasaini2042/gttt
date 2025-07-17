@@ -944,7 +944,7 @@ async def rename_item_callback(client, callback_query):
         f"📝 Please send the new name for this item.\n\n"
         f"📄 *Current Name*:\n`{current_name}`"
     )
-@app.on_message(filters.private & filters.text & StatusFilter("renaming"))
+@app.on_message(filters.private & filters.text & StatusFilter("renaming:"))
 async def rename_text_handler(client, message):
     user_id = str(message.from_user.id)
     new_name = message.text.strip()
@@ -1746,7 +1746,7 @@ async def rename_file_prompt(client, callback_query):
     await callback_query.message.reply_document(document=file_id,
         caption = f"📄 Current File Name:\n`{current_name}`\n\n✏️ Please send the new name for this file."
     )
-@app.on_message(filters.private & filters.text & StatusFilter("file_renaming"))
+@app.on_message(filters.private & filters.text & StatusFilter("file_renaming:"))
 async def rename_file_receive(client, message):
     user_id = str(message.from_user.id)
     new_name = message.text.strip()

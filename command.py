@@ -926,7 +926,7 @@ async def rename_item_callback(client, callback_query):
     # 🔄 Save user status
     with open(status_user_file, "r") as f:
         data = json.load(f)
-    data[user_id] = f"renaming1:{folder_id}:{item_id}"
+    data[user_id] = f"youti_renaming1:{folder_id}:{item_id}"
     with open(status_user_file, "w") as f:
         json.dump(data, f, indent=2)
 
