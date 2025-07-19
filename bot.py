@@ -1,24 +1,16 @@
-import json
-import os
+import json, os, threading, broadcast, blocked
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo, User
 from script import app, run_flask, run_bot,is_user_subscribed_requests
-import threading
-from common_data import data_file,data_file1, users_file, status_user_file, temp_folder_file,temp_url_file,temp_webapp_file,temp_file_json, DEFAULT_JSON,OWNER,ADMINS
-import json
-from typing import Union
-# Generate inline keyboard for root folder + admin buttons
-from collections import defaultdict
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from collections import defaultdict
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from common_data import data_file,data_file1, users_file, status_user_file, temp_folder_file,temp_url_file,temp_webapp_file,temp_file_json, DEFAULT_JSON,OWNER,ADMINS,REQUIRED_CHANNELS
 
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from typing import Union
 from collections import defaultdict
-import json
+
 from filters.status_filters import StatusFilter
 from uuid import uuid4
-def save_user(user_id: int):
+
+async def save_user(client, user_id: int):
     try:
         with open(users_file, "r") as f:
             data = json.load(f)
@@ -29,12 +21,49 @@ def save_user(user_id: int):
     except (FileNotFoundError, json.JSONDecodeError):
         users = []
 
+    # Only act if it's a new user
     if user_id not in users:
         users.append(user_id)
-
         with open(users_file, "w") as f:
-            json.dump(users, f)
+            json.dump(users, f, indent=2)
 
+        try:
+            user: User = await client.get_users(user_id)
+            name = user.first_name or ""
+            username = f"@{user.username}" if user.username else "N/A"
+            mention = f"[{name}](tg://user?id={user_id})"
+
+            # Message for Admins (plain)
+            admin_msg = (
+                f"🆕 **New User Joined!**\n\n"
+                f"👤 Name: {name}\n"
+                f"🔗 Username: {username}\n"
+                f"🆔 ID: `{user_id}`"
+            )
+
+            # Message for OWNER (with mention)
+            owner_msg = (
+                f"🆕 **New User Joined!**\n\n"
+                f"👤 Name: {mention}\n"
+                f"🔗 Username: {username}\n"
+                f"🆔 ID: `{user_id}`"
+            )
+
+            for admin_id in ADMINS():
+                if admin_id != OWNER:
+                    try:
+                        await client.send_message(admin_id, admin_msg)
+                    except Exception as e:
+                        print(f"❌ Could not notify admin {admin_id}: {e}")
+
+            # Notify OWNER separately with mention
+            try:
+                await client.send_message(OWNER, owner_msg)
+            except Exception as e:
+                print(f"❌ Could not notify OWNER: {e}")
+
+        except Exception as e:
+            print(f"❌ Could not fetch new user info: {e}")
 def escape_markdown(text: str) -> str:
     return text
 
@@ -87,7 +116,8 @@ def get_root_inline_keyboard(user_id: int):
         buttons.append(button_row)
 
     # 🔧 Add Controls
-    if user_id in ADMINS:
+    print(ADMINS())
+    if user_id in ADMINS():
         buttons.append([
             InlineKeyboardButton("➕ Add File", callback_data="add_file:root"),
             InlineKeyboardButton("📁 Add Folder", callback_data="add_folder:root")
@@ -119,21 +149,142 @@ def get_root_inline_keyboard(user_id: int):
 @app.on_message(filters.command("add_command") & filters.private)
 async def add_command_handler(client, message):
     user_id = message.from_user.id
-    if user_id not in ADMINS:
+    if user_id not in ADMINS():
         await message.reply_text("❌ Only admins can use this.")
         return
     set_user_status(user_id, "awaiting_command")
     await message.reply_text("✅ Please send the **command name** (example: `/mycommand`)")
+    
+def get_users():
+    try:
+        with open(users_file, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+def remove_user(uid):
+    try:
+        with open(users_file, "r") as f:
+            data = json.load(f)
+        if uid in data:
+            data.remove(uid)
+            with open(users_file, "w") as f:
+                json.dump(data, f, indent=2)
+    except:
+        pass
+
+
+@app.on_message(filters.command("users") & filters.private)
+async def users_command(client, message):
+    user_id = message.from_user.id
+    if user_id not in ADMINS():
+        return
+
+    users = get_users()
+    page = 0
+    per_page = 10
+    start = page * per_page
+    end = start + per_page
+    buttons = []
+
+    # पहले admin खुद को दिखाएं
+    try:
+        user = await client.get_users(user_id)
+        name = f"{user.first_name} (You)"
+        buttons.append([InlineKeyboardButton(name, callback_data=f"user_{user_id}")])
+    except:
+        pass  # Admin की जानकारी fetch नहीं हो पाई तो skip
+
+    count = 0
+    for uid in users:
+        if uid == user_id:
+            continue  # admin को skip करें क्योंकि already top पर add कर दिया
+        if count >= per_page:
+            break
+        try:
+            user = await client.get_users(uid)
+            name = user.first_name
+            buttons.append([InlineKeyboardButton(name, callback_data=f"user_{uid}")])
+            count += 1
+        except Exception as e:
+            print(f"❌ Removed blocked user {uid}")
+            remove_user(uid)
+
+    nav_buttons = []
+    if len(users) - int(user_id in users) > per_page:
+        nav_buttons.append(InlineKeyboardButton("Next ⏭️", callback_data=f"users_page_1"))
+    if nav_buttons:
+        buttons.append(nav_buttons)
+
+    if buttons:
+        await message.reply_text("👥 Users List (Page 1)", reply_markup=InlineKeyboardMarkup(buttons))
+    else:
+        await message.reply_text("❌ No active users found.")
+@app.on_callback_query(filters.regex(r"^users_page_(\d+)$"))
+async def paginate_users(client, callback_query):
+    user_id = callback_query.from_user.id
+    if user_id not in ADMINS():
+        await callback_query.answer("❌ Not allowed", show_alert=True)
+        return
+
+    page = int(callback_query.data.split("_")[-1])
+    users = get_users()
+    per_page = 10
+    start = page * per_page
+    end = start + per_page
+    buttons = []
+
+    if page == 0:
+        # Page 1 पर admin को सबसे ऊपर दिखाएं
+        try:
+            user = await client.get_users(user_id)
+            name = f"{user.first_name} (You)"
+            buttons.append([InlineKeyboardButton(name, callback_data=f"user_{user_id}")])
+        except:
+            pass
+
+    count = 0
+    for uid in users:
+        if page == 0 and uid == user_id:
+            continue  # First page में admin को skip करें क्योंकि top में already add किया
+        if count < per_page:
+            try:
+                user = await client.get_users(uid)
+                name = user.first_name
+                buttons.append([InlineKeyboardButton(name, callback_data=f"user_{uid}")])
+                count += 1
+            except:
+                print(f"❌ Removed blocked user {uid}")
+                remove_user(uid)
+
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton("⏮️ Previous", callback_data=f"users_page_{page - 1}"))
+    if (page + 1) * per_page < len(users) - int(user_id in users):
+        nav_buttons.append(InlineKeyboardButton("Next ⏭️", callback_data=f"users_page_{page + 1}"))
+    if nav_buttons:
+        buttons.append(nav_buttons)
+
+    if buttons:
+        await callback_query.message.edit_text(
+            f"👥 Users List (Page {page + 1})",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    else:
+        await callback_query.message.edit_text("❌ No active users on this page.")
+
+    await callback_query.answer()
 @app.on_message(filters.command("start") & filters.regex(r"^/start$") & filters.private)
 async def start_handler(client, message: Message):
     user = message.from_user
     user_id = user.id
-    save_user(user_id)
+    await save_user(client, user_id)
     from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
     from common_data import REQUIRED_CHANNELS
 
     if not is_user_subscribed_requests(user_id):
         buttons = []
+        channel_links_text = ""
 
         for channel in REQUIRED_CHANNELS.split(","):
             channel = channel.strip()
@@ -149,10 +300,13 @@ async def start_handler(client, message: Message):
             else:
                 link = f"https://t.me/{channel}"
 
+            channel_links_text += f"🔗 {link}\n"
             buttons.append([InlineKeyboardButton("📢 Join Channel", url=link)])
 
         await message.reply_text(
-            "📢Please Join Below Channels and send /start again\n📢 कृपया नीचे दिए गए चैनल्स को जॉइन करें फिर /start भेजें:",
+            "Please Join Below Channels send /start again\n"
+            "📢 कृपया नीचे दिए गए सभी चैनल्स को जॉइन करें फिर /start भेजें:\n\n"
+            f"{channel_links_text}",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
         return
@@ -180,14 +334,17 @@ async def start_handler(client, message: Message):
 
     welcome_text = template
     markup = get_root_inline_keyboard(user_id)
-
-    await message.reply_text(welcome_text, reply_markup=markup)
+    try:
+        await message.reply_text(welcome_text, reply_markup=markup)
+    except:
+        await message.reply_text(welcome_text)
 @app.on_message(filters.private & filters.command("restart"))
 async def handle_restart(client, message):
     user_id = str(message.from_user.id)
     from common_data import REQUIRED_CHANNELS
     if not is_user_subscribed_requests(user_id):
         buttons = []
+        channel_links_text = ""
 
         for channel in REQUIRED_CHANNELS.split(","):
             channel = channel.strip()
@@ -203,10 +360,13 @@ async def handle_restart(client, message):
             else:
                 link = f"https://t.me/{channel}"
 
+            channel_links_text += f"🔗 {link}\n"
             buttons.append([InlineKeyboardButton("📢 Join Channel", url=link)])
 
         await message.reply_text(
-            "📢 कृपया नीचे दिए गए सभी चैनल्स को जॉइन करें फिर /start भेजें:",
+            "Please Join Below Channels send /start again\n"
+            "📢 कृपया नीचे दिए गए सभी चैनल्स को जॉइन करें फिर /start भेजें:\n\n"
+            f"{channel_links_text}",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
         return
@@ -231,7 +391,10 @@ async def handle_restart(client, message):
                 json.dump(data, f, indent=2)
     user = message.from_user
     user_id = user.id
-    await message.reply("🔄 Your session has been reset. You can start fresh now.",reply_markup=get_root_inline_keyboard(user_id))
+    try:
+        await message.reply("🔄 Your session has been reset. You can start fresh now.",reply_markup=get_root_inline_keyboard(user_id))
+    except:
+        await message.reply("🔄 Your session has been reset. You can /start fresh now.")
 
 import admins
 def load_commands_data():
@@ -295,7 +458,7 @@ def build_inline_keyboard(items: list, user_id: int, current_folder: dict) -> In
     folder_id = current_folder.get("id", "root")
     allow = current_folder.get("user_allow", [])
 
-    if user_id in ADMINS:
+    if user_id in ADMINS():
         buttons.append([
             InlineKeyboardButton("➕ Add File", callback_data=f"add_file1:{folder_id}"),
             InlineKeyboardButton("📁 Add Folder", callback_data=f"add_folder1:{folder_id}")
@@ -340,7 +503,7 @@ def set_user_status(user_id: int, status: str):
 async def receive_command_name(client, message):
     user_id = message.from_user.id
 
-    if user_id not in ADMINS:
+    if user_id not in ADMINS():
         await message.reply_text("❌ Only admins can add commands.")
         return
 

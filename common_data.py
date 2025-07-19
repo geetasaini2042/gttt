@@ -18,11 +18,13 @@ temp_webapp_file = os.path.join(BASE_PATH, "tempwebapp.json")
 temp_file_json = os.path.join(BASE_PATH, "tempfile.json")
 users_file = os.path.join(BASE_PATH, "users.json")
 ADMINS_FILE = os.path.join(BASE_PATH, "ADMINS.json")
-try:
-    with open(ADMINS_FILE, "r") as f:
-        ADMINS = json.load(f)
-except (FileNotFoundError, json.JSONDecodeError):
-    ADMINS = [6150091802]  # default fallback
+BLOCKED_FILE = os.path.join(BASE_PATH, "blocked_users.json")
+def ADMINS():
+     try:
+         with open(ADMINS_FILE, "r") as f:
+             return json.load(f)
+     except (FileNotFoundError, json.JSONDecodeError):
+         return [6150091802]  # default fallback
 DEFAULT_JSON = {
     "data": {
         "id": "root",

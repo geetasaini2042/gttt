@@ -3,14 +3,14 @@ import json
 import logging
 from pymongo import MongoClient
 from flask import Flask, request, jsonify
-from common_data import data_file,data_file1, MD_URI, DEFAULT_JSON,users_file,BOT_TOKEN,REQUIRED_CHANNELS,OWNER 
+from common_data import data_file,data_file1, MD_URI, DEFAULT_JSON,users_file,BOT_TOKEN,REQUIRED_CHANNELS,OWNER ,BLOCKED_FILE, ADMINS_FILE
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
     # You can add filename='log.txt' if you want to save logs in a file
 )
-import os
+
 import requests
 
 
@@ -156,3 +156,87 @@ def find_parent_of_parent(root, folder_id):
         return None
 
     return dfs(root)
+    
+def upload_json_to_mongodb():
+    try:
+        client = MongoClient(MD_URI)
+        db = client["bot_database"]
+
+        # Collections
+        collection1 = db["blocked_users"]
+        collection2 = db["admins"]
+
+        # --- Upload blocked_users.json ---
+        try:
+            with open(BLOCKED_FILE, "r") as f:
+                blocked = json.load(f)
+
+            collection1.delete_many({})  # Clear old data
+
+            if isinstance(blocked, list):
+                collection1.insert_many([{"user_id": uid} for uid in blocked])
+                logging.info(f"✅ Uploaded {len(blocked)} blocked users to MongoDB.")
+            else:
+                logging.warning("⚠️ blocked_users.json format is invalid (not list)")
+
+        except Exception as e:
+            logging.error(f"❌ Error uploading blocked_users.json: {e}")
+
+        # --- Upload admins.json ---
+        try:
+            with open(ADMINS_FILE, "r") as f:
+                admins = json.load(f)
+
+            collection2.delete_many({})
+
+            if isinstance(admins, list):
+                collection2.insert_many([{"admin_id": aid} for aid in admins])
+                logging.info(f"✅ Uploaded {len(admins)} admins to MongoDB.")
+            else:
+                logging.warning("⚠️ admins.json format is invalid (not list)")
+
+        except Exception as e:
+            logging.error(f"❌ Error uploading admins.json: {e}")
+
+    except Exception as e:
+        logging.error(f"❌ MongoDB connection failed: {e}")
+
+
+def download_from_mongodb():
+    try:
+
+        client = MongoClient(MD_URI)
+        db = client["bot_database"]
+
+        # Collections
+        collection1 = db["blocked_users"]
+        collection2 = db["admins"]
+
+        # --- Blocked Users Sync ---
+        try:
+            blocked_cursor = collection1.find({})
+            blocked_list = [doc["user_id"] for doc in blocked_cursor if "user_id" in doc]
+
+            with open(BLOCKED_FILE, "w") as f:
+                json.dump(blocked_list, f, indent=2)
+
+            logging.info(f"✅ blocked_users.json saved with {len(blocked_list)} users.")
+
+        except Exception as e:
+            logging.error(f"❌ Failed to save blocked_users.json: {e}")
+
+        # --- Admins Sync ---
+        try:
+            admins_cursor = collection2.find({})
+            admins_list = [doc["admin_id"] for doc in admins_cursor if "admin_id" in doc]
+
+            with open(ADMINS_FILE, "w") as f:
+                json.dump(admins_list, f, indent=2)
+
+            logging.info(f"✅ admins.json saved with {len(admins_list)} admins.")
+
+        except Exception as e:
+            logging.error(f"❌ Failed to save admins.json: {e}")
+
+    except Exception as e:
+        logging.error(f"❌ MongoDB connection failed: {e}")

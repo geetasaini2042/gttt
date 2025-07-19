@@ -8,7 +8,7 @@ from pyrogram import Client, filters
 from pyrogram.errors import RPCError
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import json
-from common_data import data_file, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL,ADMINS, ADMINS_FILE
+from common_data import data_file, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL,ADMINS
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import json
@@ -32,6 +32,7 @@ from pyrogram.types import Message
 from filters.status_filters import StatusFilter
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 #requests.post(DEPLOY_URL)
+
 
 def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
     try:
@@ -122,12 +123,7 @@ def generate_folder_keyboard(folder: dict, user_id: int):
         sorted_rows.append(button_row)
 
     # ➕ Add Buttons
-    try:
-        with open(ADMINS_FILE, "r") as f:
-            ADMINS = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        ADMINS = [6150091802] 
-    if user_id in ADMINS or get_created_by_from_folder(folder_id) == user_id:
+    if user_id in ADMINS() or get_created_by_from_folder(folder_id) == user_id:
         sorted_rows.append([
             InlineKeyboardButton("➕ Add File", callback_data=f"add_file:{folder_id}"),
             InlineKeyboardButton("📁 Add Folder", callback_data=f"add_folder:{folder_id}")
@@ -153,7 +149,7 @@ def generate_folder_keyboard(folder: dict, user_id: int):
             sorted_rows.append(user_buttons[i:i+2])
 
     # ✏️ Edit Button
-    if user_id in ADMINS or folder.get("created_by") == user_id:
+    if user_id in ADMINS() or folder.get("created_by") == user_id:
         sorted_rows.append([
             InlineKeyboardButton("✏️ Edit Folder Layout", callback_data=f"edit1_item1:{folder_id}")
         ])
@@ -210,7 +206,7 @@ async def add_folder_callback(client, callback_query):
     full_data = load_bot_data()
     root = full_data.get("data", {})
     parent_folder = find_folder_by_id(root, parent_id)
-    if (not is_user_action_allowed(parent_id, "add_folder") and user_id not in ADMINS and get_created_by_from_folder(parent_id) != user_id):
+    if (not is_user_action_allowed(parent_id, "add_folder") and user_id not in ADMINS() and get_created_by_from_folder(parent_id) != user_id):
              await callback_query.answer("❌ You are not allowed to add a folder in this folder.", show_alert=True)
              return
     if not parent_folder:
@@ -377,7 +373,7 @@ async def confirm_and_save_folder(client, callback_query):
         return
 
     parent_id = folder_data["parent_id"]
-    if (not is_user_action_allowed(parent_id, "add_folder") and int(user_id) not in ADMINS and get_created_by_from_folder(parent_id) != int(user_id)):
+    if (not is_user_action_allowed(parent_id, "add_folder") and int(user_id) not in ADMINS() and get_created_by_from_folder(parent_id) != int(user_id)):
              await callback_query.answer("❌ You are not allowed to add a folder in this folder.", show_alert=True)
              return
     # 🧩 Load bot_data.json
@@ -443,7 +439,7 @@ async def confirm_and_save_folder(client, callback_query):
 async def add_url_callback(client, callback_query):
     folder_id = callback_query.data.split(":")[1]
     user_id = str(callback_query.from_user.id)
-    if (not is_user_action_allowed(folder_id, "add_url") and int(user_id) not in ADMINS and get_created_by_from_folder(folder_id) != int(user_id)):
+    if (not is_user_action_allowed(folder_id, "add_url") and int(user_id) not in ADMINS() and get_created_by_from_folder(folder_id) != int(user_id)):
              await callback_query.answer("❌ You are not allowed to add a folder in this folder.", show_alert=True)
              return
     # ✅ Status Set
@@ -640,7 +636,7 @@ async def edit_menu_handler(client, callback_query):
         return
 
     # 🔐 Access Check
-    if user_id not in ADMINS and folder.get("created_by") != user_id:
+    if user_id not in ADMINS() and folder.get("created_by") != user_id:
         await callback_query.answer("❌ Not allowed", show_alert=True)
         return
 
@@ -696,7 +692,7 @@ async def edit_item_handler(client, callback_query):
         return
 
     # 🔐 Access check
-    if user_id not in ADMINS and item.get("created_by") != user_id:
+    if user_id not in ADMINS() and item.get("created_by") != user_id:
         await callback_query.answer("❌ Not allowed", show_alert=True)
         return
 
@@ -770,7 +766,7 @@ async def update_created_by_handler(client, callback_query):
     user_id = callback_query.from_user.id
 
     # ✅ Access Check (Admins only)
-    if user_id not in ADMINS:
+    if user_id not in ADMINS():
         await callback_query.answer("❌ Only admins can change ownership.", show_alert=True)
         return
 
@@ -1074,7 +1070,7 @@ async def delete_item_final(client, message):
 async def move_menu_handler(client, callback_query):
     folder_id, item_id = callback_query.data.split(":")[1:]
     user_id = callback_query.from_user.id
-    if user_id not in ADMINS and get_created_by_from_folder(folder_id) != user_id:
+    if user_id not in ADMINS() and get_created_by_from_folder(folder_id) != user_id:
              await callback_query.answer("❌ You are not allowed to add a folder in this folder.", show_alert=True)
              return
     with open(data_file, "r") as f:
@@ -1415,7 +1411,7 @@ async def move_left_handler(client: Client, callback_query):
 async def add_webapp_callback(client, callback_query):
     folder_id = callback_query.data.split(":")[1]
     user_id = str(callback_query.from_user.id)
-    if (not is_user_action_allowed(folder_id, "add_webapp") and int(user_id) not in ADMINS and get_created_by_from_folder(folder_id) != int(user_id)):
+    if (not is_user_action_allowed(folder_id, "add_webapp") and int(user_id) not in ADMINS() and get_created_by_from_folder(folder_id) != int(user_id)):
              await callback_query.answer("❌ You are not allowed to add a folder in this folder.", show_alert=True)
              return
     # ✅ Status Set
@@ -1567,7 +1563,7 @@ async def receive_webapp_caption(client, message):
 async def add_file_callback(client, callback_query):
     folder_id = callback_query.data.split(":")[1]
     user_id = str(callback_query.from_user.id)
-    if (not is_user_action_allowed(folder_id, "add_file") and int(user_id) not in ADMINS and get_created_by_from_folder(folder_id) != int(user_id)):
+    if (not is_user_action_allowed(folder_id, "add_file") and int(user_id) not in ADMINS() and get_created_by_from_folder(folder_id) != int(user_id)):
              await callback_query.answer("❌ You are not allowed to add a folder in this folder.", show_alert=True)
              return
     # 🔄 Load or init status
@@ -1608,7 +1604,7 @@ async def receive_any_media(client, message):
     with open(status_user_file) as f:
         status_data = json.load(f)
     folder_id = status_data.get(user_id, "").split(":")[1]
-    if (not is_user_action_allowed(folder_id, "add_file") and int(user_id) not in ADMINS and get_created_by_from_folder(folder_id) != int(user_id)):
+    if (not is_user_action_allowed(folder_id, "add_file") and int(user_id) not in ADMINS() and get_created_by_from_folder(folder_id) != int(user_id)):
           await message.reply_text("❌ You are not allowed to add a file in this folder.")
           return
     # 🧾 Identify type & get file info
@@ -2000,7 +1996,7 @@ async def confirm_file_callback(client, callback_query):
         return
 
     folder_id = temp_data[user_id]["folder_id"]
-    if (not is_user_action_allowed(folder_id, "add_file") and int(user_id) not in ADMINS and get_created_by_from_folder(folder_id) != int(user_id)):
+    if (not is_user_action_allowed(folder_id, "add_file") and int(user_id) not in ADMINS() and get_created_by_from_folder(folder_id) != int(user_id)):
              await callback_query.answer("❌ You are not allowed to add a file in this folder.", show_alert=True)
              return
     try:
@@ -2106,7 +2102,7 @@ async def send_file_from_json(client, callback_query):
 
     # ✅ Add edit button if user is admin or owner
     buttons = []
-    if user_id in ADMINS or user_id == created_by:
+    if user_id in ADMINS() or user_id == created_by:
         folder_id = find_folder_id_of_item(root, file_uuid)  # 🔍 You must have this utility function
         buttons.append([
             InlineKeyboardButton("✏️ Edit Item", callback_data=f"edit_item_file:{folder_id}:{file_uuid}")
@@ -2187,7 +2183,7 @@ async def edit_item_file_handler(client, callback_query):
         return
 
     # 🔐 Permission check
-    if user_id not in ADMINS and file_data.get("created_by") != user_id:
+    if user_id not in ADMINS() and file_data.get("created_by") != user_id:
         await callback_query.answer("❌ You don't have access.", show_alert=True)
         return
 
@@ -2236,7 +2232,7 @@ async def edit_file_caption_callback(client, callback_query):
         return
 
     # 🔐 Permission check
-    if int(user_id) not in ADMINS and file_data.get("created_by") != int(user_id):
+    if int(user_id) not in ADMINS() and file_data.get("created_by") != int(user_id):
         await callback_query.answer("❌ You don't have permission.", show_alert=True)
         return
 
@@ -2358,7 +2354,7 @@ async def toggle_file_visibility(client, callback_query):
     file_data, parent_folder = result
 
     # 🔐 Check permission
-    if int(user_id) not in ADMINS and file_data.get("created_by") != int(user_id):
+    if int(user_id) not in ADMINS() and file_data.get("created_by") != int(user_id):
         await callback_query.answer("❌ You don't have permission.", show_alert=True)
         return
 
@@ -2407,7 +2403,7 @@ async def update_folder_allow_handler(client, callback_query):
         await callback_query.answer("❌ Folder not found", show_alert=True)
         return
 
-    if int(user_id) not in ADMINS and folder.get("created_by") != int(user_id):
+    if int(user_id) not in ADMINS() and folder.get("created_by") != int(user_id):
         await callback_query.answer("❌ You are not allowed", show_alert=True)
         return
 
@@ -2455,7 +2451,7 @@ async def toggle_folder_allow_callback(client, callback_query):
         await callback_query.answer("❌ Folder not found", show_alert=True)
         return
 
-    if int(user_id) not in ADMINS and folder.get("created_by") != int(user_id):
+    if int(user_id) not in ADMINS() and folder.get("created_by") != int(user_id):
         await callback_query.answer("❌ You are not allowed", show_alert=True)
         return
 

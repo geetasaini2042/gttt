@@ -1,6 +1,6 @@
 import os,json
 from common_data import ADMINS_FILE,OWNER,status_user_file
-from script import app
+from script import app,upload_json_to_mongodb
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from filters.status_filters import StatusFilter
@@ -18,12 +18,6 @@ def set_user_status(user_id: int, status: str):
         json.dump(data, f)
         
 
-
-
-
-
-
-
 @app.on_message(filters.command("admin") & filters.private)
 async def admin_handler(client, message):
     user_id = message.from_user.id
@@ -37,7 +31,7 @@ async def admin_handler(client, message):
     markup = InlineKeyboardMarkup(buttons)
 
     await message.reply_text(
-        "⚙️ *Admin Control Panel*",
+        "⚙️ **Admin Control Panel**",
         reply_markup=markup
     )
 
@@ -78,7 +72,7 @@ async def show_admins_callback(client, callback_query):
     markup = InlineKeyboardMarkup(buttons)
 
     await callback_query.message.edit_text(
-        "👥 *Admins List:*",
+        "👥 **Admins List:**",
         reply_markup=markup
     )
     
@@ -113,7 +107,7 @@ async def add_admin_forward_callback(client, callback_query):
     set_user_status(user_id, "awaiting_admin_forward")
 
     await callback_query.message.edit_text(
-        "📩 Please *forward* a message from the user you want to add as admin."
+        "📩 Please **forward** a message from the user you want to add as admin."
     )
     
 @app.on_message(filters.private & filters.forwarded & StatusFilter("awaiting_admin_forward"))
@@ -147,8 +141,9 @@ async def receive_forwarded_admin(client, message):
         json.dump(admins, f, indent=2)
 
     clear_user_status(user_id)
-
-    await message.reply_text(f"✅ Added new admin: `{new_admin_id}`", parse_mode=None)
+    msg = await message.reply_text(f"Please Wait...")
+    upload_json_to_mongodb()
+    await msg.edit_text(f"✅ Added new admin: `{new_admin_id}`")
 @app.on_callback_query(filters.regex("^add_admin_id$"))
 async def add_admin_id_callback(client, callback_query):
     user_id = callback_query.from_user.id
@@ -192,9 +187,9 @@ async def receive_admin_id(client, message):
         json.dump(admins, f, indent=2)
 
     clear_user_status(user_id)
-
-    await message.reply_text(f"✅ Added new admin: `{new_admin_id}`", parse_mode=None)
-    
+    msg = await message.reply_text(f"Please Wait...")
+    upload_json_to_mongodb()
+    await msg.edit_text(f"✅ Added new admin: `{new_admin_id}`")
 @app.on_callback_query(filters.regex(r"^show_admin_options:(\d+)$"))
 async def show_admin_options(client, callback_query):
     user_id = callback_query.from_user.id

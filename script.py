@@ -1,8 +1,6 @@
 from pyrogram import Client
-import os
-from config import save_mongodb_data_to_file ,find_parent_of_parent,save_mongodb_users_to_file,is_user_subscribed_requests
-import os
-import json
+import os, json
+from config import save_mongodb_data_to_file ,find_parent_of_parent,save_mongodb_users_to_file,is_user_subscribed_requests,upload_json_to_mongodb, download_from_mongodb
 from pymongo import MongoClient
 from flask import Flask, request, jsonify,abort
 from bson import json_util
@@ -199,7 +197,10 @@ def get_all_data():
 
 @flask_app.route("/")
 def home():
+  is_termux = os.getenv("is_termux", "false").lower() == "true"
+  if not is_termux:
     upload_users()
+    upload_json_to_mongodb()
     return "Flask server is running."
 
 
@@ -217,10 +218,12 @@ def run_bot():
     if not is_termux:
         save_mongodb_users_to_file()
         save_mongodb_data_to_file()
+        download_from_mongodb()
     app.run()
     if not is_termux:
       requests.post(DEPLOY_URL)
       upload_users()
+      upload_json_to_mongodb()
     logging.info("Stopped\n")
 def get_created_by_from_folder(folder_id):
     try:
@@ -265,3 +268,6 @@ def is_user_action_allowed(folder_id, action):
         return False
 
     return action in folder.get("user_allow", [])
+@flask_app.route("/save-admin-to-mongodb-data", methods=["GET"])
+def upload_json_admin_blocked_to_md():
+  upload_json_to_mongodb()
