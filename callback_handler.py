@@ -1,37 +1,14 @@
-from pyrogram import filters
 from script import app, get_created_by_from_folder, is_user_action_allowed
-import json
+import json, re, os, requests, uuid
 from typing import Union
-import os
-import requests
-from pyrogram import Client, filters
 from pyrogram.errors import RPCError
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import json
-from common_data import data_file, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL,ADMINS
+from common_data import data_file, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL_UPLOAD,ADMINS, FILE_LOGS,DEPLOY_URL
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-import json
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, InputMediaDocument, Message
 from collections import defaultdict
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
-from pyrogram.types import InputMediaDocument
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from collections import defaultdict
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from collections import defaultdict
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from filters.status_filters import StatusFilter
-from pyrogram import Client, filters
-from pyrogram.types import Message
-from filters.status_filters import StatusFilter
-import json
-import re
-from pyrogram import filters
-from pyrogram.types import Message
-from filters.status_filters import StatusFilter
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-#requests.post(DEPLOY_URL)
+
+#requests.post(DEPLOY_URL_UPLOAD)
 
 
 def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
@@ -259,7 +236,6 @@ async def receive_folder_name(client, message):
         json.dump(status_data, f)
 
     await message.reply(f"✅ नाम सेव हो गया: {text}\nअब नया folder का विवरण (description) भेजें।")
-from filters.status_filters import StatusFilter
 
 @app.on_message(filters.private & filters.text & StatusFilter("getting_folder_description"))
 async def receive_folder_description(client, message):
@@ -352,8 +328,6 @@ async def toggle_permission_handler(client, callback_query):
         "✅ चयन अपडेट हो गया!\nनीचे से टॉगल करें और अंत में Confirm करें।",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
-    
-import uuid
 
 @app.on_callback_query(filters.regex("^confirm_folder$"))
 async def confirm_and_save_folder(client, callback_query):
@@ -433,7 +407,7 @@ async def confirm_and_save_folder(client, callback_query):
         json.dump(status_data, f)
     kb = generate_folder_keyboard(parent, int(user_id))
     sent = await callback_query.message.edit_text("Please wait...")
-    requests.post(DEPLOY_URL)
+    requests.post(DEPLOY_URL_UPLOAD)
     await callback_query.message.edit_text(f"📁 Folder '{new_item['name']}' saved successfully!", reply_markup=kb)
 @app.on_callback_query(filters.regex(r"^add_url:(.+)$"))
 async def add_url_callback(client, callback_query):
@@ -583,7 +557,7 @@ async def receive_url_caption(client, message):
         json.dump(status_data, f)
     sent = await message.reply_text("Please wait...")
     kb = generate_folder_keyboard(parent, int(user_id))
-    requests.post(DEPLOY_URL)
+    requests.post(DEPLOY_URL_UPLOAD)
     await sent.edit_text("🔗 URL Added Successfully✅️", reply_markup=kb)
 def find_folder_by_id(folder, folder_id):
     if folder.get("id") == folder_id and folder.get("type") == "folder":
@@ -842,7 +816,6 @@ async def update_description_prompt(client, callback_query):
         f"📝 Please send the new description for this folder.\n\n"
         f"📄 *Current Description*:\n`{current_description}`"
     )
-from pyrogram import filters
 
 def escape_markdown(text: str) -> str:
     return text
@@ -1557,7 +1530,7 @@ async def receive_webapp_caption(client, message):
     sent = await message.reply_text("Please wait...")
     kb = generate_folder_keyboard(parent, int(user_id))
     message = generate_folder_keyboard(parent, int(user_id))
-    requests.post(DEPLOY_URL)
+    requests.post(DEPLOY_URL_UPLOAD)
     await sent.edit_text("🧩 WebApp सफलतापूर्वक जोड़ा गया ✅", reply_markup=kb)
 @app.on_callback_query(filters.regex(r"^add_file:(.+)$"))
 async def add_file_callback(client, callback_query):
@@ -1594,7 +1567,6 @@ async def add_file_callback(client, callback_query):
         json.dump(temp_data, f, indent=2)
 
     await callback_query.message.edit_text("Please Send me documents..")
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 @app.on_message(filters.private & StatusFilter("waiting_file_doc") & (filters.document | filters.video | filters.audio | filters.photo))
 async def receive_any_media(client, message):
@@ -1634,16 +1606,16 @@ async def receive_any_media(client, message):
 
     # 🔁 Send to Channel
     if media_type == "photo":
-        sent = await client.send_photo(-1002421086860, photo=original_file_id)
+        sent = await client.send_photo(FILE_LOGS, photo=original_file_id)
         new_file_id = sent.photo.file_id
     elif media_type == "video":
-        sent = await client.send_video(-1002421086860, video=original_file_id)
+        sent = await client.send_video(FILE_LOGS, video=original_file_id)
         new_file_id = sent.video.file_id
     elif media_type == "audio":
-        sent = await client.send_audio(-1002421086860, audio=original_file_id)
+        sent = await client.send_audio(FILE_LOGS, audio=original_file_id)
         new_file_id = sent.audio.file_id
     else:
-        sent = await client.send_document(-1002421086860, document=original_file_id)
+        sent = await client.send_document(FILE_LOGS, document=original_file_id)
         new_file_id = sent.document.file_id
 
     caption = message.caption or file_name
@@ -1670,7 +1642,7 @@ async def receive_any_media(client, message):
         "name": file_name,
         "file_id": new_file_id,
         "caption": caption,
-        "visibility": "public",
+        "visibility": "private",
         "row": 0,
         "column": 0
     }
@@ -1731,6 +1703,7 @@ async def rename_file_prompt(client, callback_query):
 
     current_name = file_entry.get("name", "Unnamed")
     file_id = file_entry.get("file_id", "123")
+    sub_type = file_entry.get("sub_type", "document")
 
     # ✅ Update Status
     with open(status_user_file, "r") as f:
@@ -1739,9 +1712,12 @@ async def rename_file_prompt(client, callback_query):
     with open(status_user_file, "w") as f:
         json.dump(status_data, f)
     await callback_query.message.delete()
-    await callback_query.message.reply_document(document=file_id,
-        caption = f"📄 Current File Name:\n`{current_name}`\n\n✏️ Please send the new name for this file."
-    )
+    reply_func = getattr(callback_query.message, f"reply_{sub_type}")
+    kwargs = {
+         sub_type: file_id,  # example: document=file_id
+         "caption": f"📄 Current File Name:\n`{current_name}`\n\n✏️ Please send the new name for this file."
+          }
+    await reply_func(**kwargs)
 @app.on_message(filters.private & filters.text & StatusFilter("file_renaming:"))
 async def rename_file_receive(client, message):
     user_id = str(message.from_user.id)
@@ -1780,7 +1756,7 @@ async def rename_file_receive(client, message):
 **Caption** : `{file_entry.get("caption") or new_name}`
 **File ID** : `{file_id}`
     """
-    visibility = file_entry.get("visibility", "public")
+    visibility = file_entry.get("visibility", "private")
     sub_type = file_entry.get("sub_type", "document")
 
     buttons = [
@@ -1820,6 +1796,7 @@ async def edit_file_caption_prompt(client, callback_query):
 
     current_caption = file_entry.get("caption", file_entry.get("name", "No caption"))
     file_id = file_entry.get("file_id", "123")
+    sub_type = file_entry.get("sub_type", "document")
     # ✅ Update Status
     with open(status_user_file, "r") as f:
         status_data = json.load(f)
@@ -1827,9 +1804,12 @@ async def edit_file_caption_prompt(client, callback_query):
     with open(status_user_file, "w") as f:
         json.dump(status_data, f)
     await callback_query.message.delete()
-    await callback_query.message.reply_document(document=file_id,
-        caption = f"📝 Current Caption:\n`{current_caption}`\n\nNow, please send the **new caption** for this file."
-    )
+    reply_func = getattr(callback_query.message, f"reply_{sub_type}")
+    kwargs = {
+         sub_type: file_id,  # example: document=file_id
+         "caption": f"📝 Current Caption:\n`{current_caption}`\n\nNow, please send the **new caption** for this file."
+          }
+    await reply_func(**kwargs)
 @app.on_message(filters.private & filters.text & StatusFilter("file_captioning"))
 async def edit_caption_receive(client, message):
     user_id = str(message.from_user.id)
@@ -1911,9 +1891,11 @@ async def toggle_visibility_callback(client, callback_query):
         await callback_query.answer("❌ फ़ाइल नहीं मिली।", show_alert=True)
         return
 
-    # 🔁 Visibility Toggle
+    # 🔁 Circular visibility cycle
+    visibility_cycle = ["public", "private", "vip"]
     current_visibility = file_entry.get("visibility", "public")
-    new_visibility = "private" if current_visibility == "public" else "public"
+    current_index = visibility_cycle.index(current_visibility)
+    new_visibility = visibility_cycle[(current_index + 1) % len(visibility_cycle)]
     file_entry["visibility"] = new_visibility
 
     # 💾 Save tempfile.json
@@ -1925,11 +1907,12 @@ async def toggle_visibility_callback(client, callback_query):
     name = file_entry["name"]
     caption_text = file_entry.get("caption", name)
 
-    caption = f"""Visibility Updated
+    caption = f"""📄 **Visibility Updated**
 **Name** : `{name}`
 **Caption** : `{caption_text}`
 **File ID** : `{file_id}`
-    """
+**Visibility** : `{new_visibility}`
+"""
 
     buttons = [
         [InlineKeyboardButton("✏️ Rename", callback_data=f"rename_file:{file_uuid}")],
@@ -1941,12 +1924,7 @@ async def toggle_visibility_callback(client, callback_query):
         ]
     ]
 
-    await callback_query.message.edit_media(
-        media=InputMediaDocument(
-            media=file_id,
-            caption=caption
-        ),
-        reply_markup=InlineKeyboardMarkup(buttons)
+    await callback_query.message.edit_text(caption,reply_markup=InlineKeyboardMarkup(buttons)
     )
 @app.on_callback_query(filters.regex(r"^cancel_file:(.+)$"))
 async def cancel_file_handler(client, callback_query):
@@ -2051,7 +2029,7 @@ async def confirm_file_callback(client, callback_query):
     # ✅ Folder open again
     await callback_query.message.edit_caption("Please wait...") 
     kb = generate_folder_keyboard(parent, int(user_id))
-    requests.post(DEPLOY_URL)
+    requests.post(DEPLOY_URL_UPLOAD)
     await callback_query.message.edit_caption("✅ फ़ाइल सफलतापूर्वक सेव हो गई 📂", reply_markup=kb)
 def find_folder_id_of_item(folder, target_id):
     for item in folder.get("items", []):
@@ -2093,56 +2071,53 @@ async def send_file_from_json(client, callback_query):
         return
 
     file_id = file_data["file_id"]
-    caption = file_data.get("caption", file_data.get("name", ""))
+    name = file_data.get("name", "Unnamed")
+    caption = file_data.get("caption", name)
     sub_type = file_data.get("sub_type", "document")
-    protect = file_data.get("visibility") == "private"
+    visibility = file_data.get("visibility", "public")
     created_by = file_data.get("created_by")
+    protect = visibility == "private"
 
     chat_id = callback_query.message.chat.id
+    unlock_url = DEPLOY_URL.rstrip("/") + f"/unlock_file"
+    # 🛑 If file is VIP, send unlock message
+    if visibility == "vip":
+        unlock_url = f"https://geetasaini2042.github.io/Ru/Premium/unlock.html?uuid={file_uuid}&url={unlock_url}"
+        print(unlock_url,f"?uuid={file_uuid}&user_id=6150091802")
+        unlock_msg = f"""🔒 **This is a Private File**
+        
+📄 **Name:** `{name}`  
+📝 **Description:** `{caption}`  
+
+To access this file, please unlock it using the button below.
+"""
+        buttons = [
+            [InlineKeyboardButton("🔓 Unlock this file", web_app=WebAppInfo(url=unlock_url))]
+        ]
+        await callback_query.message.reply(unlock_msg, reply_markup=InlineKeyboardMarkup(buttons))
+        await callback_query.answer()
+        return
 
     # ✅ Add edit button if user is admin or owner
     buttons = []
     if user_id in ADMINS() or user_id == created_by:
-        folder_id = find_folder_id_of_item(root, file_uuid)  # 🔍 You must have this utility function
+        folder_id = find_folder_id_of_item(root, file_uuid)
         buttons.append([
             InlineKeyboardButton("✏️ Edit Item", callback_data=f"edit_item_file:{folder_id}:{file_uuid}")
         ])
 
-    # 📨 Send based on sub_type using correct methods
-    try:
-        if sub_type == "photo":
-            await client.send_photo(
-                chat_id=chat_id,
-                photo=file_id,
-                caption=caption,
-                protect_content=protect,
-                reply_markup=InlineKeyboardMarkup(buttons) if buttons else None
-            )
-        elif sub_type == "video":
-            await client.send_video(
-                chat_id=chat_id,
-                video=file_id,
-                caption=caption,
-                protect_content=protect,
-                reply_markup=InlineKeyboardMarkup(buttons) if buttons else None
-            )
-        elif sub_type == "audio":
-            await client.send_audio(
-                chat_id=chat_id,
-                audio=file_id,
-                caption=caption,
-                protect_content=protect,
-                reply_markup=InlineKeyboardMarkup(buttons) if buttons else None
-            )
-        else:
-            await client.send_document(
-                chat_id=chat_id,
-                document=file_id,
-                caption=caption,
-                protect_content=protect,
-                reply_markup=InlineKeyboardMarkup(buttons) if buttons else None
-            )
-    except Exception as e:
+    # 📤 Send actual file
+    try:  
+        method = getattr(client, f"send_{sub_type}", client.send_document)  
+        media_arg = {sub_type if sub_type in ["photo", "video", "audio"] else "document": file_id}  
+        await method(  
+            chat_id=chat_id,  
+            caption=caption,  
+            protect_content=protect,  
+            reply_markup=InlineKeyboardMarkup(buttons) if buttons else None,  
+            **media_arg  
+        )  
+    except Exception as e:  
         await callback_query.message.reply(f"❌ Error sending file: {e}")
 
     await callback_query.answer()
@@ -2188,7 +2163,7 @@ async def edit_item_file_handler(client, callback_query):
         return
 
     # 🔁 Get current visibility
-    visibility = file_data.get("visibility", "public")
+    visibility = file_data.get("visibility", "private")
 
     # 📋 Build editing buttons
     buttons = [
@@ -2358,9 +2333,11 @@ async def toggle_file_visibility(client, callback_query):
         await callback_query.answer("❌ You don't have permission.", show_alert=True)
         return
 
-    # 🔄 Toggle visibility
+    # 🔄 Circular toggle for visibility
+    visibility_cycle = ["public", "private", "vip"]
     current = file_data.get("visibility", "public")
-    new_visibility = "private" if current == "public" else "public"
+    current_index = visibility_cycle.index(current)
+    new_visibility = visibility_cycle[(current_index + 1) % len(visibility_cycle)]
     file_data["visibility"] = new_visibility
 
     # 💾 Save back
@@ -2604,7 +2581,6 @@ async def copy_done_handler(client, callback_query):
         await callback_query.answer("❌ Destination folder not found", show_alert=True)
         return
 
-    import uuid
 
     # Recursive deep copy with new ids and correct parent_id
     def deep_copy(item, new_parent_id):
@@ -2638,7 +2614,7 @@ async def copy_done_handler(client, callback_query):
 
     await callback_query.answer("✅ Copied successfully")
     await callback_query.message.edit_text("Please Wait...")
-    requests.post(DEPLOY_URL)
+    requests.post(DEPLOY_URL_UPLOAD)
     markup = generate_folder_keyboard(dest_folder, user_id)
     await callback_query.message.edit_text(
         "✅ Copied successfully!",

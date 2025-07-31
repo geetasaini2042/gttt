@@ -6,7 +6,7 @@ API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 REQUIRED_CHANNELS = os.getenv("REQUIRED_CHANNELS", "")  # comma-separated
 MD_URI = os.getenv("MONGODB_URI")
-DEPLOY_URL = os.getenv("URL", "http://127.0.0.1:5000/upload-data")
+DEPLOY_URL_UPLOAD = os.getenv("URL", "http://127.0.0.1:5000/upload-data")
 OWNER = int(os.getenv("OWNER", 6150091802))
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 data_file = os.path.join(BASE_PATH, "bot_data.json")
@@ -19,6 +19,8 @@ temp_file_json = os.path.join(BASE_PATH, "tempfile.json")
 users_file = os.path.join(BASE_PATH, "users.json")
 ADMINS_FILE = os.path.join(BASE_PATH, "ADMINS.json")
 BLOCKED_FILE = os.path.join(BASE_PATH, "blocked_users.json")
+FILE_LOGS = int(os.getenv("FILE_LOGS", -1002421086860))
+DEPLOY_URL = os.getenv("URL", "http://127.0.0.1:5000").removesuffix("/upload-data")
 def ADMINS():
      try:
          with open(ADMINS_FILE, "r") as f:

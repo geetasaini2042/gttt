@@ -194,7 +194,7 @@ def get_all_data():
         return json_util.dumps({"status": "success", "data": data}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
+import vip_file
 @flask_app.route("/")
 def home():
   is_termux = os.getenv("is_termux", "false").lower() == "true"
