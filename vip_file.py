@@ -4,10 +4,12 @@ import os
 from script import flask_app     
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from common_data import data_file,BOT_TOKEN, ADMINS
+from common_data import data_file, BOT_TOKEN, ADMINS
+
 CORS(flask_app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# 🔍 Find item by ID
 def find_item_by_id(folder, target_id):
     for item in folder.get("items", []):
         if item.get("id") == target_id:
@@ -18,7 +20,7 @@ def find_item_by_id(folder, target_id):
                 return result
     return None
 
-# 🔍 Utility to find parent folder of item
+# 🔍 Find parent folder of item
 def find_folder_id_of_item(folder, target_id, parent_id=None):
     for item in folder.get("items", []):
         if item.get("id") == target_id:
@@ -70,23 +72,29 @@ def unlock_and_send_file():
 
     reply_markup = {"inline_keyboard": buttons} if buttons else None
 
-    # 📤 Send file
+    # Determine media type and method
     media_type = sub_type if sub_type in ["photo", "video", "audio"] else "document"
     method = f"send{sub_type.capitalize()}" if sub_type in ["photo", "video", "audio"] else "sendDocument"
 
+    # 📤 Prepare payload
+    payload = {
+        "chat_id": user_id,
+        media_type: file_id,
+        "caption": caption,
+        "protect_content": True
+    }
+
+    if reply_markup:
+        payload["reply_markup"] = json.dumps(reply_markup)  # ✅ FIXED HERE
+
+    # 📤 Send file
     try:
-        res = requests.post(
-            f"{TELEGRAM_API_URL}/{method}",
-            json={
-                "chat_id": user_id,
-                media_type: file_id,
-                "caption": caption,
-                "protect_content" : True,
-                "reply_markup": reply_markup
-            }
-        )
+        res = requests.post(f"{TELEGRAM_API_URL}/{method}", json=payload)
         if res.status_code != 200 or not res.json().get("ok"):
-            return jsonify({"status": "error", "message": f"Telegram API error: {res.text}"}), 500
+            return jsonify({
+                "status": "error",
+                "message": f"Telegram API error: {res.text}"
+            }), 500
 
     except Exception as e:
         return jsonify({"status": "error", "message": f"Telegram send error: {e}"}), 500
