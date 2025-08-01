@@ -17,15 +17,22 @@ from flask import Flask, request, render_template_string, redirect, url_for
 flask_app = Flask(__name__)
 
 
+import fcntl
+
+def safe_read_json(filepath):
+    with open(filepath, "r", encoding="utf-8") as f:
+        fcntl.flock(f, fcntl.LOCK_SH)  # shared lock for read
+        data = json.load(f)
+        fcntl.flock(f, fcntl.LOCK_UN)
+    return data
+
 @flask_app.route("/get-file/<path:filename>")
 def get_json_file(filename):
-    # Ensure file ends with .json
     if not filename.endswith(".json"):
         return abort(400, "Only .json files are allowed.")
 
     file_path = os.path.join(BASE_PATH, filename)
 
-    # Security: prevent path traversal (../../etc/passwd)
     if not os.path.abspath(file_path).startswith(BASE_PATH):
         return abort(403, "Access Denied.")
 
@@ -33,67 +40,68 @@ def get_json_file(filename):
         return abort(404, "File not found.")
 
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = safe_read_json(file_path)
         return jsonify(data)
     except Exception as e:
         return abort(500, f"Error reading file: {str(e)}")
-
 @flask_app.route("/upload-users", methods=["POST"])
 def upload_users():
     try:
-        # MongoDB
         client = MongoClient(MD_URI)
         db = client["bot_database"]
         users_collection = db["users_collection"]
 
-        # load local file
         with open(users_file, "r") as f:
             users_data = json.load(f)
 
-        # save to MongoDB
         result = users_collection.update_one(
             {"type": "userlist"},
             {"$set": {"type": "userlist", "users": users_data}},
             upsert=True
         )
 
-        return jsonify({
+        return {
             "status": "success",
             "message": "users.json data saved to MongoDB",
             "matched_count": result.matched_count,
             "modified_count": result.modified_count,
             "upserted_id": str(result.upserted_id) if result.upserted_id else None
-        })
+        }, 200
+
     except Exception as e:
-        return jsonify({"status": "error", "message": "Failed to upload users.json to MongoDB", "error": str(e)}), 500
+        return {
+            "status": "error",
+            "message": "Failed to upload users.json to MongoDB",
+            "error": str(e)
+        }, 500
+#Safe file write ---
+def safe_write_json(filepath, data):
+    with open(filepath, "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)  # exclusive lock
+        json.dump(data, f, indent=2)
+        fcntl.flock(f, fcntl.LOCK_UN)
 @flask_app.route("/upload-data", methods=["GET", "POST"])
 def handle_data():
-    # MongoDB client
     client = MongoClient(MD_URI)
     db = client["bot_database"]
-    collection1 = db["bot_data_collection"]   # for data_file
-    collection2 = db["bot_data_collection_1"] # for data_file1
+    collection1 = db["bot_data_collection"]
+    collection2 = db["bot_data_collection_1"]
 
     # Files check and create if missing
     if not os.path.exists(data_file):
-        with open(data_file, "w") as f:
-            json.dump(DEFAULT_JSON, f, indent=2)
+        safe_write_json(data_file, DEFAULT_JSON)
 
     if not os.path.exists(data_file1):
-        with open(data_file1, "w") as f:
-            json.dump(DEFAULT_JSON, f, indent=2)
+        safe_write_json(data_file1, DEFAULT_JSON)
 
-    # Load both files
+    # Load both files safely
     try:
-        with open(data_file, "r") as f:
-            file_data = json.load(f)
+        file_data = safe_read_json(data_file)
     except Exception as e:
         return jsonify({"status": "error", "message": "Failed to read local JSON (data_file)", "error": str(e)}), 500
 
     try:
-        with open(data_file1, "r") as f:
-            file_data1 = json.load(f)
+        file_data1 = safe_read_json(data_file1)
     except Exception as e:
         return jsonify({"status": "error", "message": "Failed to read local JSON (data_file1)", "error": str(e)}), 500
 
@@ -102,7 +110,6 @@ def handle_data():
             db_data1 = collection1.find_one({"data.id": "root"})
             db_data2 = collection2.find_one({"data.id": "root"})
 
-            # convert ObjectIds to string
             if db_data1:
                 db_data1["_id"] = str(db_data1["_id"])
             if db_data2:
@@ -145,7 +152,6 @@ def handle_data():
             })
         except Exception as e:
             return jsonify({"status": "error", "message": "MongoDB insert failed", "error": str(e)}), 500
-
 @flask_app.route("/save-to-mongodb-from-file", methods=["GET"])
 def save_to_mongodb():
     try:
@@ -242,8 +248,6 @@ def home():
     return "Flask server is running."
 
 
-def run_flask():
-    flask_app.run(host="0.0.0.0", port=5000)
 
 import os
 from dotenv import load_dotenv
@@ -309,3 +313,6 @@ def is_user_action_allowed(folder_id, action):
 @flask_app.route("/save-admin-to-mongodb-data", methods=["GET"])
 def upload_json_admin_blocked_to_md():
   upload_json_to_mongodb()
+  
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=5000)
