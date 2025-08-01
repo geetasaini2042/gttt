@@ -2,7 +2,7 @@ from script import app, get_created_by_from_folder, is_user_action_allowed
 import json, re, os, requests, uuid
 from typing import Union
 from pyrogram.errors import RPCError
-from common_data import data_file, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL_UPLOAD,ADMINS, FILE_LOGS,DEPLOY_URL
+from common_data import data_file, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL_UPLOAD,ADMINS, FILE_LOGS,DEPLOY_URL, PREMIUM_CHECK_LOG, send_startup_message_once
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, InputMediaDocument, Message
 from collections import defaultdict
@@ -1535,6 +1535,7 @@ async def receive_webapp_caption(client, message):
 @app.on_callback_query(filters.regex(r"^add_file:(.+)$"))
 async def add_file_callback(client, callback_query):
     folder_id = callback_query.data.split(":")[1]
+    await send_startup_message_once()
     user_id = str(callback_query.from_user.id)
     if (not is_user_action_allowed(folder_id, "add_file") and int(user_id) not in ADMINS() and get_created_by_from_folder(folder_id) != int(user_id)):
              await callback_query.answer("❌ You are not allowed to add a folder in this folder.", show_alert=True)
@@ -2049,6 +2050,9 @@ def find_item_by_id(folder, target_id):
             if found:
                 return found
     return None
+from datetime import datetime
+import pytz  # Make sure this is installed: pip install pytz
+
 @app.on_callback_query(filters.regex(r"^file:(.+)$"))
 async def send_file_from_json(client, callback_query):
     file_uuid = callback_query.data.split(":")[1]
@@ -2079,26 +2083,83 @@ async def send_file_from_json(client, callback_query):
     protect = visibility == "private"
 
     chat_id = callback_query.message.chat.id
-    unlock_url = DEPLOY_URL.rstrip("/") + f"/unlock_file"
-    # 🛑 If file is VIP, send unlock message
-    if visibility == "vip":
-        unlock_url = f"https://geetasaini2042.github.io/Ru/Premium/unlock.html?uuid={file_uuid}&url={unlock_url}"
-        print(unlock_url,f"?uuid={file_uuid}&user_id=6150091802")
-        unlock_msg = f"""🔒 **This is a Private File**
-        
-📄 **Name:** `{name}`  
-📝 **Description:** `{caption}`  
+    unlock_base_url = DEPLOY_URL.rstrip("/") + f"/unlock_file"
 
-To access this file, please unlock it using the button below.
+    # 🛑 Handle VIP File
+    if visibility == "vip":
+        try:
+            # 📤 Send file to internal monitoring channel
+            temp_method = getattr(client, f"send_{sub_type}", client.send_document)
+            media_arg = {sub_type if sub_type in ["photo", "video", "audio"] else "document": file_id}
+
+            # 🧑‍💼 User info
+            user = callback_query.from_user
+            full_name = (user.first_name or "") + (" " + user.last_name if user.last_name else "")
+            username = f"@{user.username}" if user.username else "N/A"
+
+            # 🕒 India time
+            india_time = datetime.now(pytz.timezone("Asia/Kolkata")).strftime('%Y-%m-%d %H:%M:%S')
+
+            # 📄 Caption for internal log
+            user_info = f"👤 **Name:** {full_name}\n🆔 **User ID:** `{user.id}`\n🔗 **Username:** {username}\n🕒 **Time:** {india_time}"
+            file_info = f"📁 **File Name:** {name}\n📝 **Description:** {caption}"
+            combined_caption = f"🔐 **VIP File Access Attempt**\n\n{user_info}\n\n{file_info}"
+
+            sent_msg = await temp_method(
+                chat_id=PREMIUM_CHECK_LOG,
+                caption=combined_caption,
+                **media_arg
+            )
+
+            # 📏 File size
+            file_size = None
+            if sub_type == "document" and sent_msg.document:
+                file_size = sent_msg.document.file_size
+            elif sub_type == "video" and sent_msg.video:
+                file_size = sent_msg.video.file_size
+            elif sub_type == "audio" and sent_msg.audio:
+                file_size = sent_msg.audio.file_size
+
+            readable_size = f"{round(file_size / (1024 * 1024), 2)} MB" if file_size else "Unknown"
+
+            # 🔗 Build unlock URL
+            import urllib.parse
+            unlock_url = (
+                "https://geetasaini2042.github.io/Ru/Premium/unlock.html?"
+                f"uuid={urllib.parse.quote_plus(file_uuid)}"
+                f"&file_name={urllib.parse.quote_plus(name)}"
+                f"&file_des={urllib.parse.quote_plus(caption)}"
+                f"&file_size={urllib.parse.quote_plus(readable_size)}"
+                f"&url={urllib.parse.quote_plus(unlock_base_url)}"
+             )
+
+            # 💬 User-facing unlock message
+            unlock_msg = f"""🔐 **Exclusive Premium File**
+
+**📁 Name:** `{name}`  
+**📝 Description:** `{caption}`  
+**📦 Size:** `{readable_size}`
+
+This is a premium file with valuable content, available only to exclusive users.
+
+💡 To unlock this file, simply tap the button below and view a short ad.  
+It helps us keep the content accessible for everyone. Thank you for your support! 🙏
+
+👇 Tap **Unlock Now** to continue.
 """
-        buttons = [
-            [InlineKeyboardButton("🔓 Unlock this file", web_app=WebAppInfo(url=unlock_url))]
-        ]
-        await callback_query.message.reply(unlock_msg, reply_markup=InlineKeyboardMarkup(buttons))
-        await callback_query.answer()
+
+            buttons = [
+                [InlineKeyboardButton("🔓 Unlock this file", web_app=WebAppInfo(url=unlock_url))]
+            ]
+            await callback_query.message.reply(unlock_msg, reply_markup=InlineKeyboardMarkup(buttons))
+            await callback_query.answer()
+
+        except Exception as e:
+            await callback_query.message.reply(f"❌ Failed to prepare VIP file: {e}")
+            await callback_query.answer()
         return
 
-    # ✅ Add edit button if user is admin or owner
+    # ✅ Non-VIP file handling (with optional edit button)
     buttons = []
     if user_id in ADMINS() or user_id == created_by:
         folder_id = find_folder_id_of_item(root, file_uuid)

@@ -1,6 +1,7 @@
 import os,json
 from dotenv import load_dotenv
 load_dotenv()
+import requests
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -20,6 +21,7 @@ users_file = os.path.join(BASE_PATH, "users.json")
 ADMINS_FILE = os.path.join(BASE_PATH, "ADMINS.json")
 BLOCKED_FILE = os.path.join(BASE_PATH, "blocked_users.json")
 FILE_LOGS = int(os.getenv("FILE_LOGS", -1002421086860))
+PREMIUM_CHECK_LOG = int(os.getenv("PREMIUM_CHANNEL", -1002421086860))
 DEPLOY_URL = os.getenv("URL", "http://127.0.0.1:5000").removesuffix("/upload-data")
 def ADMINS():
      try:
@@ -27,6 +29,38 @@ def ADMINS():
              return json.load(f)
      except (FileNotFoundError, json.JSONDecodeError):
          return [6150091802]  # default fallback
+FLAG_FILE = os.path.join(BASE_PATH, "ho.kuchhBhi")
+STARTUP_MESSAGE = "🤖 Bot is now online! (via raw API)"
+
+# Channel IDs from environment or hardcoded fallback
+CHANNEL_IDS = [PREMIUM_CHECK_LOG, FILE_LOGS, REQUIRED_CHANNELS]
+
+async def send_startup_message_once():
+    if os.path.exists(FLAG_FILE):
+        print("✅ Startup message already sent before.")
+        return
+
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
+    for chat_id in CHANNEL_IDS:
+        payload = {
+            "chat_id": chat_id,
+            "text": STARTUP_MESSAGE
+        }
+
+        try:
+            response = requests.post(url, data=payload)
+            result = response.json()
+            if result.get("ok"):
+                print(f"✅ Message sent to {chat_id}")
+            else:
+                print(f"❌ Failed for {chat_id}: {result}")
+        except Exception as e:
+            print(f"❌ Exception for {chat_id}: {e}")
+
+    # Mark as done so it doesn't repeat
+    with open(FLAG_FILE, "w") as f:
+        f.write("done")
 DEFAULT_JSON = {
     "data": {
         "id": "root",

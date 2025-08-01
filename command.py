@@ -8,7 +8,7 @@ from pyrogram import Client, filters
 from pyrogram.errors import RPCError
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import json
-from common_data import data_file1, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL_UPLOAD,ADMINS
+from common_data import data_file1, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL_UPLOAD,ADMINS,send_startup_message_once
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import json
@@ -1553,6 +1553,7 @@ async def receive_webapp_caption(client, message):
 @app.on_callback_query(filters.regex(r"^add_file1:(.+)$"))
 async def add_file_callback(client, callback_query):
     folder_id = callback_query.data.split(":")[1]
+    await send_startup_message_once()
     user_id = str(callback_query.from_user.id)
     if (not is_user_action_allowed(folder_id, "add_file") and int(user_id) not in ADMINS() and get_created_by_from_folder(folder_id) != int(user_id)):
              await callback_query.answer("❌ You are not allowed to add a folder in this folder.", show_alert=True)

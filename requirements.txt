@@ -2,6 +2,7 @@ pyrogram==2.0.106
 tgcrypto==1.2.5
 python-dotenv==1.0.0
 Flask>=2.0,<3.0
+pytz
 flask_cors
 Werkzeug>=2.0,<3.0
 aiofiles==23.2.1

@@ -2,7 +2,7 @@ import json, os, threading, broadcast, blocked
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo, User
 from script import app, run_flask, run_bot,is_user_subscribed_requests
-from common_data import data_file,data_file1, users_file, status_user_file, temp_folder_file,temp_url_file,temp_webapp_file,temp_file_json, DEFAULT_JSON,OWNER,ADMINS,REQUIRED_CHANNELS
+from common_data import data_file,data_file1, users_file, status_user_file, temp_folder_file,temp_url_file,temp_webapp_file,temp_file_json, DEFAULT_JSON,OWNER,ADMINS,REQUIRED_CHANNELS,send_startup_message_once
 
 from typing import Union
 from collections import defaultdict
@@ -279,6 +279,7 @@ async def start_handler(client, message: Message):
     user = message.from_user
     user_id = user.id
     await save_user(client, user_id)
+    await send_startup_message_once()
     from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
     from common_data import REQUIRED_CHANNELS
 
