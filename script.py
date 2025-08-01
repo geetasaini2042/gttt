@@ -13,6 +13,7 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
     # You can add filename='log.txt' if you want to save logs in a file
 )
+from flask import Flask, request, render_template_string, redirect, url_for
 flask_app = Flask(__name__)
 
 
@@ -195,12 +196,49 @@ def get_all_data():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 import vip_file
-@flask_app.route("/")
-def home():
+@flask_app.route("/upload_app123")
+def upload_app123():
   is_termux = os.getenv("is_termux", "false").lower() == "true"
   if not is_termux:
     upload_users()
     upload_json_to_mongodb()
+    return "uploded"
+
+
+BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+
+HTML_TEMPLATE = '''
+<h2>Edit JSON File: {{ filename }}</h2>
+<form method="POST">
+    <textarea name="json_data" rows="20" cols="100">{{ json_data }}</textarea><br><br>
+    <input type="submit" value="Save Changes">
+</form>
+'''
+
+@flask_app.route('/edit-data/<filename>', methods=['GET', 'POST'])
+def edit_data(filename):
+    filepath = os.path.join(BASE_PATH, filename)
+
+    if not os.path.exists(filepath):
+        return f"File {filename} does not exist.", 404
+
+    if request.method == 'POST':
+        try:
+            # Parse and write JSON
+            new_data = json.loads(request.form['json_data'])
+            with open(filepath, 'w') as f:
+                json.dump(new_data, f, indent=4)
+            return redirect(url_for('edit_data', filename=filename))
+        except json.JSONDecodeError:
+            return "Invalid JSON format!", 400
+
+    with open(filepath, 'r') as f:
+        data = json.load(f)
+
+    return render_template_string(HTML_TEMPLATE, json_data=json.dumps(data, indent=4), filename=filename)
+
+@flask_app.route("/")
+def home():
     return "Flask server is running."
 
 
