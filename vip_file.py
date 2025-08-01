@@ -81,6 +81,7 @@ def unlock_and_send_file():
                 "chat_id": user_id,
                 media_type: file_id,
                 "caption": caption,
+                "protect_content" : True,
                 "reply_markup": reply_markup
             }
         )
