@@ -80,78 +80,121 @@ def safe_write_json(filepath, data):
         fcntl.flock(f, fcntl.LOCK_EX)  # exclusive lock
         json.dump(data, f, indent=2)
         fcntl.flock(f, fcntl.LOCK_UN)
-@flask_app.route("/upload-data", methods=["GET", "POST"])
-def handle_data():
+import os
+import json
+import fcntl
+import logging
+from pymongo import MongoClient
+
+logger = logging.getLogger("mongo_sync")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
+def save_data_file_to_mongo():
     client = MongoClient(MD_URI)
     db = client["bot_database"]
     collection1 = db["bot_data_collection"]
-    collection2 = db["bot_data_collection_1"]
 
-    # Files check and create if missing
+    # अगर फ़ाइल नहीं है तो safe create करना है (with lock)
     if not os.path.exists(data_file):
-        safe_write_json(data_file, DEFAULT_JSON)
+        try:
+            with open(data_file, "w") as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                json.dump(DEFAULT_JSON, f, indent=2, ensure_ascii=False)
+                fcntl.flock(f, fcntl.LOCK_UN)
+            logger.info("✅ Created default JSON file: %s", data_file)
+        except Exception as e:
+            logger.error("❌ Failed to create/write default JSON: %s | Error: %s", data_file, str(e))
+            return
+
+    try:
+        with open(data_file, "r") as f:
+            fcntl.flock(f, fcntl.LOCK_SH)
+            file_data = json.load(f)
+            fcntl.flock(f, fcntl.LOCK_UN)
+        logger.info("📥 Read local JSON file: %s", data_file)
+    except Exception as e:
+        logger.error("❌ Failed to read JSON: %s | Error: %s", data_file, str(e))
+        return
+
+    try:
+        existing = collection1.find_one({"data.id": file_data["data"]["id"]})
+        update_fields = {}
+
+        if existing:
+            existing_copy = dict(existing)
+            existing_copy.pop("_id", None)
+
+            for key in file_data:
+                if key not in existing_copy or file_data[key] != existing_copy[key]:
+                    update_fields[key] = file_data[key]
+        else:
+            update_fields = file_data
+
+        if not update_fields:
+            logger.info("🟡 No changes detected for ID %s — nothing updated.", file_data["data"]["id"])
+            return
+
+        result = collection1.update_one(
+            {"data.id": file_data["data"]["id"]},
+            {"$set": update_fields},
+            upsert=True
+        )
+
+        logger.info(
+            "✅ MongoDB updated for ID %s | Updated fields: %s | Matched: %d | Modified: %d | Upserted ID: %s",
+            file_data["data"]["id"],
+            list(update_fields.keys()),
+            result.matched_count,
+            result.modified_count,
+            str(result.upserted_id) if result.upserted_id else "None"
+        )
+
+    except Exception as e:
+        logger.error("❌ MongoDB update failed for ID %s | Error: %s", file_data["data"]["id"], str(e))
+def save_data_file1_to_mongo():
+    client = MongoClient(MD_URI)
+    db = client["bot_database"]
+    collection2 = db["bot_data_collection_1"]
 
     if not os.path.exists(data_file1):
         safe_write_json(data_file1, DEFAULT_JSON)
 
-    # Load both files safely
-    try:
-        file_data = safe_read_json(data_file)
-    except Exception as e:
-        return jsonify({"status": "error", "message": "Failed to read local JSON (data_file)", "error": str(e)}), 500
-
     try:
         file_data1 = safe_read_json(data_file1)
     except Exception as e:
-        return jsonify({"status": "error", "message": "Failed to read local JSON (data_file1)", "error": str(e)}), 500
+        return {
+            "status": "error",
+            "message": "Failed to read local JSON (data_file1)",
+            "error": str(e)
+        }
 
-    if request.method == "GET":
-        try:
-            db_data1 = collection1.find_one({"data.id": "root"})
-            db_data2 = collection2.find_one({"data.id": "root"})
-
-            if db_data1:
-                db_data1["_id"] = str(db_data1["_id"])
-            if db_data2:
-                db_data2["_id"] = str(db_data2["_id"])
-
-            return jsonify({
-                "status": "success",
-                "source": "mongodb",
-                "data_file": db_data1 if db_data1 else file_data,
-                "data_file1": db_data2 if db_data2 else file_data1
-            })
-        except Exception as e:
-            return jsonify({"status": "error", "message": "MongoDB fetch failed", "error": str(e)}), 500
-
-    elif request.method == "POST":
-        try:
-            result1 = collection1.update_one(
-                {"data.id": file_data["data"]["id"]},
-                {"$set": file_data},
-                upsert=True
-            )
-            result2 = collection2.update_one(
-                {"data.id": file_data1["data"]["id"]},
-                {"$set": file_data1},
-                upsert=True
-            )
-            return jsonify({
-                "status": "success",
-                "message": "Data saved to MongoDB",
-                "data_file": {
-                    "matched_count": result1.matched_count,
-                    "modified_count": result1.modified_count,
-                    "upserted_id": str(result1.upserted_id) if result1.upserted_id else None
-                },
-                "data_file1": {
-                    "matched_count": result2.matched_count,
-                    "modified_count": result2.modified_count,
-                    "upserted_id": str(result2.upserted_id) if result2.upserted_id else None
-                }
-            })
-        except Exception as e:
-            return jsonify({"status": "error", "message": "MongoDB insert failed", "error": str(e)}), 500
+    try:
+        result = collection2.update_one(
+            {"data.id": file_data1["data"]["id"]},
+            {"$set": file_data1},
+            upsert=True
+        )
+        return {
+            "status": "success",
+            "message": "data_file1 saved to MongoDB",
+            "result": {
+                "matched_count": result.matched_count,
+                "modified_count": result.modified_count,
+                "upserted_id": str(result.upserted_id) if result.upserted_id else None
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": "MongoDB insert failed (data_file1)",
+            "error": str(e)
+        }
 @flask_app.route("/save-to-mongodb-from-file", methods=["GET"])
 def save_to_mongodb():
     try:

@@ -1,4 +1,4 @@
-from script import app, get_created_by_from_folder, is_user_action_allowed
+from script import app, get_created_by_from_folder, is_user_action_allowed,save_data_file_to_mongo
 import json, re, os, requests, uuid
 from typing import Union
 from pyrogram.errors import RPCError
@@ -8,7 +8,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInf
 from collections import defaultdict
 from filters.status_filters import StatusFilter
 
-#requests.post(DEPLOY_URL_UPLOAD)
+#save_data_file_to_mongo()
 
 
 def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
@@ -407,7 +407,7 @@ async def confirm_and_save_folder(client, callback_query):
         json.dump(status_data, f)
     kb = generate_folder_keyboard(parent, int(user_id))
     sent = await callback_query.message.edit_text("Please wait...")
-    requests.post(DEPLOY_URL_UPLOAD)
+    save_data_file_to_mongo()
     await callback_query.message.edit_text(f"📁 Folder '{new_item['name']}' saved successfully!", reply_markup=kb)
 @app.on_callback_query(filters.regex(r"^add_url:(.+)$"))
 async def add_url_callback(client, callback_query):
@@ -557,7 +557,7 @@ async def receive_url_caption(client, message):
         json.dump(status_data, f)
     sent = await message.reply_text("Please wait...")
     kb = generate_folder_keyboard(parent, int(user_id))
-    requests.post(DEPLOY_URL_UPLOAD)
+    save_data_file_to_mongo()
     await sent.edit_text("🔗 URL Added Successfully✅️", reply_markup=kb)
 def find_folder_by_id(folder, folder_id):
     if folder.get("id") == folder_id and folder.get("type") == "folder":
@@ -1530,7 +1530,7 @@ async def receive_webapp_caption(client, message):
     sent = await message.reply_text("Please wait...")
     kb = generate_folder_keyboard(parent, int(user_id))
     message = generate_folder_keyboard(parent, int(user_id))
-    requests.post(DEPLOY_URL_UPLOAD)
+    save_data_file_to_mongo()
     await sent.edit_text("🧩 WebApp सफलतापूर्वक जोड़ा गया ✅", reply_markup=kb)
 @app.on_callback_query(filters.regex(r"^add_file:(.+)$"))
 async def add_file_callback(client, callback_query):
@@ -2030,7 +2030,7 @@ async def confirm_file_callback(client, callback_query):
     # ✅ Folder open again
     await callback_query.message.edit_caption("Please wait...") 
     kb = generate_folder_keyboard(parent, int(user_id))
-    requests.post(DEPLOY_URL_UPLOAD)
+    save_data_file_to_mongo()
     await callback_query.message.edit_caption("✅ फ़ाइल सफलतापूर्वक सेव हो गई 📂", reply_markup=kb)
 def find_folder_id_of_item(folder, target_id):
     for item in folder.get("items", []):
@@ -2675,7 +2675,7 @@ async def copy_done_handler(client, callback_query):
 
     await callback_query.answer("✅ Copied successfully")
     await callback_query.message.edit_text("Please Wait...")
-    requests.post(DEPLOY_URL_UPLOAD)
+    save_data_file_to_mongo()
     markup = generate_folder_keyboard(dest_folder, user_id)
     await callback_query.message.edit_text(
         "✅ Copied successfully!",
