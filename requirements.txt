@@ -7,6 +7,6 @@ flask_cors
 Werkzeug>=2.0,<3.0
 aiofiles==23.2.1
 motor==3.4.0
-pymongo==4.5.0
+pymongo
 dnspython==2.6.1
 requests
