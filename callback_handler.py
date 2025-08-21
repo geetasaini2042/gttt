@@ -2231,7 +2231,7 @@ async def send_file_from_json(client, callback_query):
 
             # 🔗 Build unlock URL
             import urllib.parse
-            base_unlock = "https://geetasaini2042.github.io/Ru/Premium/unlock.html?"
+            base_unlock = "https://reward.edumate.life/Premium/unlock.html?"
 
             # अगर premium_owner है तो unlock_base_url बदल दो
             if premium_owner:
