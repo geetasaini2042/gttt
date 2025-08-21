@@ -7,6 +7,7 @@ API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 REQUIRED_CHANNELS = os.getenv("REQUIRED_CHANNELS", "")  # comma-separated
 MD_URI = os.getenv("MONGODB_URI")
+is_termux = os.getenv("is_termux", "false").lower() == "true"
 DEPLOY_URL_UPLOAD = os.getenv("URL", "http://127.0.0.1:5000/upload-data")
 OWNER = int(os.getenv("OWNER", 6150091802))
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -23,6 +24,9 @@ BLOCKED_FILE = os.path.join(BASE_PATH, "blocked_users.json")
 FILE_LOGS = int(os.getenv("FILE_LOGS", -1002421086860))
 PREMIUM_CHECK_LOG = int(os.getenv("PREMIUM_CHANNEL", -1002421086860))
 DEPLOY_URL = os.getenv("URL", "http://127.0.0.1:5000").removesuffix("/upload-data")
+LIKED_FILE  = os.path.join(BASE_PATH, "PRE/liked.json")
+DISLIKED_FILE = os.path.join(BASE_PATH, "PRE/disliked.json")
+PDF_VIEWS_FILE = os.path.join(BASE_PATH, "PRE/PDF_VIEWS_FILE.json")
 def ADMINS():
      try:
          with open(ADMINS_FILE, "r") as f:

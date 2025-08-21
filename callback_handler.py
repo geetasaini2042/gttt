@@ -2,7 +2,7 @@ from script import app, get_created_by_from_folder, is_user_action_allowed,save_
 import json, re, os, requests, uuid
 from typing import Union
 from pyrogram.errors import RPCError
-from common_data import data_file, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL_UPLOAD,ADMINS, FILE_LOGS,DEPLOY_URL, PREMIUM_CHECK_LOG, send_startup_message_once
+from common_data import data_file, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL_UPLOAD,ADMINS, FILE_LOGS,DEPLOY_URL, PREMIUM_CHECK_LOG, send_startup_message_once, is_termux
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, InputMediaDocument, Message
 from collections import defaultdict
@@ -407,7 +407,8 @@ async def confirm_and_save_folder(client, callback_query):
         json.dump(status_data, f)
     kb = generate_folder_keyboard(parent, int(user_id))
     sent = await callback_query.message.edit_text("Please wait...")
-    save_data_file_to_mongo()
+    if not is_termux:
+      save_data_file_to_mongo()
     await callback_query.message.edit_text(f"📁 Folder '{new_item['name']}' saved successfully!", reply_markup=kb)
 @app.on_callback_query(filters.regex(r"^add_url:(.+)$"))
 async def add_url_callback(client, callback_query):
@@ -557,7 +558,8 @@ async def receive_url_caption(client, message):
         json.dump(status_data, f)
     sent = await message.reply_text("Please wait...")
     kb = generate_folder_keyboard(parent, int(user_id))
-    save_data_file_to_mongo()
+    if not is_termux:
+      save_data_file_to_mongo()
     await sent.edit_text("🔗 URL Added Successfully✅️", reply_markup=kb)
 def find_folder_by_id(folder, folder_id):
     if folder.get("id") == folder_id and folder.get("type") == "folder":
@@ -1530,7 +1532,8 @@ async def receive_webapp_caption(client, message):
     sent = await message.reply_text("Please wait...")
     kb = generate_folder_keyboard(parent, int(user_id))
     message = generate_folder_keyboard(parent, int(user_id))
-    save_data_file_to_mongo()
+    if not is_termux:
+      save_data_file_to_mongo()
     await sent.edit_text("🧩 WebApp सफलतापूर्वक जोड़ा गया ✅", reply_markup=kb)
 @app.on_callback_query(filters.regex(r"^add_file:(.+)$"))
 async def add_file_callback(client, callback_query):
@@ -1656,6 +1659,8 @@ async def receive_any_media(client, message):
         [InlineKeyboardButton("✏️ Rename", callback_data=f"rename_file:{file_uuid}")],
         [InlineKeyboardButton("📝 Edit Caption", callback_data=f"edit_file_caption:{file_uuid}")],
         [InlineKeyboardButton("👁 Visibility: Public", callback_data=f"toggle_visibility:{file_uuid}")],
+        [InlineKeyboardButton("FILE IS UNDER A USER", callback_data=f"add_premium_owner:{file_uuid}")
+          ],
         [
             InlineKeyboardButton("✅ Confirm Upload", callback_data=f"confirm_file:{file_uuid}"),
             InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file:{file_uuid}")
@@ -1687,6 +1692,23 @@ async def receive_any_media(client, message):
     )
     else:
        await message.reply("❌ Unknown media type.")
+status_data = {}
+@app.on_callback_query(filters.regex(r"^add_premium_owner:(.+)$"))
+async def add_premium_owner_cb(client, callback_query):
+    file_uuid = callback_query.matches[0].group(1)
+    user_id = callback_query.from_user.id
+
+    # Set user status for getting the premium owner ID
+    status_data = {}
+    status_data[str(user_id)] = f"getting_pre_owner_id:{file_uuid}"
+    with open(status_user_file, "w") as f:
+        json.dump(status_data, f, indent=2)
+
+    await callback_query.message.reply_text(
+        "कृपया उस यूज़र का ID भेजें जिसे आप premium owner बनाना चाहते हैं:"
+    )
+    await callback_query.answer()
+
 
 @app.on_callback_query(filters.regex(r"^rename_file:(.+)$"))
 async def rename_file_prompt(client, callback_query):
@@ -1764,6 +1786,8 @@ async def rename_file_receive(client, message):
         [InlineKeyboardButton("✏️ Rename", callback_data=f"rename_file:{file_uuid}")],
         [InlineKeyboardButton("📝 Edit Caption", callback_data=f"edit_file_caption:{file_uuid}")],
         [InlineKeyboardButton(f"👁 Visibility: {visibility}", callback_data=f"toggle_visibility:{file_uuid}")],
+        [InlineKeyboardButton("FILE IS UNDER A USER", callback_data=f"add_premium_owner:{file_uuid}")
+          ],
         [
             InlineKeyboardButton("✅ Confirm Upload", callback_data=f"confirm_file:{file_uuid}"),
             InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file:{file_uuid}")
@@ -1861,6 +1885,8 @@ async def edit_caption_receive(client, message):
         [InlineKeyboardButton("✏️ Rename", callback_data=f"rename_file:{file_uuid}")],
         [InlineKeyboardButton("📝 Edit Caption", callback_data=f"edit_file_caption:{file_uuid}")],
         [InlineKeyboardButton(f"👁 Visibility: {visibility}", callback_data=f"toggle_visibility:{file_uuid}")],
+        [InlineKeyboardButton("FILE IS UNDER A USER", callback_data=f"add_premium_owner:{file_uuid}")
+          ],
         [
             InlineKeyboardButton("✅ Confirm Upload", callback_data=f"confirm_file:{file_uuid}"),
             InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file:{file_uuid}")
@@ -1919,6 +1945,8 @@ async def toggle_visibility_callback(client, callback_query):
         [InlineKeyboardButton("✏️ Rename", callback_data=f"rename_file:{file_uuid}")],
         [InlineKeyboardButton("📝 Edit Caption", callback_data=f"edit_file_caption:{file_uuid}")],
         [InlineKeyboardButton(f"👁 Visibility: {new_visibility}", callback_data=f"toggle_visibility:{file_uuid}")],
+        [InlineKeyboardButton("FILE IS UNDER A USER", callback_data=f"add_premium_owner:{file_uuid}")
+          ],
         [
             InlineKeyboardButton("✅ Confirm Upload", callback_data=f"confirm_file:{file_uuid}"),
             InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file:{file_uuid}")
@@ -1955,7 +1983,68 @@ async def cancel_file_handler(client, callback_query):
         await callback_query.message.edit_caption("❌ File upload cancelled successfully.")
     else:
         await callback_query.answer("❌ File not found or already cancelled.", show_alert=True)
-        
+@app.on_message(filters.private & filters.text & StatusFilter("getting_pre_owner_id:"))
+async def handle_premium_owner_id(client, message):
+    try:
+        with open(status_user_file, "r") as f:
+            status_data = json.load(f)
+    except FileNotFoundError:
+        status_data = {}
+
+    try:
+        with open(temp_file_json, "r") as f:
+            temp_data = json.load(f)
+    except FileNotFoundError:
+        temp_data = {}
+
+    user_id = str(message.from_user.id)
+    new_owner_id = message.text.strip()
+    current_status = status_data.get(user_id)
+
+    if not current_status:
+        await message.reply_text("Status invalid. कृपया फिर से callback से शुरू करें।")
+        return
+
+    # file_uuid निकालना
+    file_uuid = current_status.split(":")[1]
+
+    # temp_data structure check
+    if user_id not in temp_data or "files" not in temp_data[user_id] or file_uuid not in temp_data[user_id]["files"]:
+        await message.reply_text("⚠️ File data नहीं मिला, कृपया फिर से add करें।")
+        return
+
+    # बस yahi par append/update karna hai
+    temp_data[user_id]["files"][file_uuid]["premium_owner"] = new_owner_id  
+
+    # बाकी data untouched रहेगा
+    with open(temp_file_json, "w") as f:
+        json.dump(temp_data, f, indent=2)
+
+    # Status clear
+    status_data.pop(user_id, None)
+    with open(status_user_file, "w") as f:
+        json.dump(status_data, f, indent=2)
+
+    # Buttons banaye
+    file_data = temp_data[user_id]["files"][file_uuid]
+    new_visibility = file_data.get("visibility", "private")
+
+    buttons = [
+        [InlineKeyboardButton("✏️ Rename", callback_data=f"rename_file:{file_uuid}")],
+        [InlineKeyboardButton("📝 Edit Caption", callback_data=f"edit_file_caption:{file_uuid}")],
+        [InlineKeyboardButton(f"👁 Visibility: {new_visibility}", callback_data=f"toggle_visibility:{file_uuid}")],
+        [InlineKeyboardButton("UPDATE PREMIUM OWNER", callback_data=f"add_premium_owner:{file_uuid}")],
+        [
+            InlineKeyboardButton("✅ Confirm Upload", callback_data=f"confirm_file:{file_uuid}"),
+            InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file:{file_uuid}")
+        ]
+    ]
+
+    await message.reply_text(
+        f"✅ Premium owner {new_owner_id} added for file {file_uuid}.",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+######
 @app.on_callback_query(filters.regex(r"^confirm_file:(.+)$"))
 async def confirm_file_callback(client, callback_query):
     file_id = callback_query.data.split(":")[1]
@@ -1975,9 +2064,14 @@ async def confirm_file_callback(client, callback_query):
         return
 
     folder_id = temp_data[user_id]["folder_id"]
-    if (not is_user_action_allowed(folder_id, "add_file") and int(user_id) not in ADMINS() and get_created_by_from_folder(folder_id) != int(user_id)):
-             await callback_query.answer("❌ You are not allowed to add a file in this folder.", show_alert=True)
-             return
+    if (
+        not is_user_action_allowed(folder_id, "add_file")
+        and int(user_id) not in ADMINS()
+        and get_created_by_from_folder(folder_id) != int(user_id)
+    ):
+        await callback_query.answer("❌ You are not allowed to add a file in this folder.", show_alert=True)
+        return
+
     try:
         with open(data_file) as f:
             bot_data = json.load(f)
@@ -1993,25 +2087,36 @@ async def confirm_file_callback(client, callback_query):
 
     existing_rows = [item.get("row", 0) for item in parent.get("items", [])]
     next_row = max(existing_rows, default=-1) + 1
+    # ✅ created_by को premium_owner के हिसाब से सेट करना
+    if "premium_owner" in file_data and file_data["premium_owner"]:
+        created_by_val = int(file_data["premium_owner"])
+    else:
+        created_by_val = int(user_id)
 
+    # ✅ final file बनाना
     final_file = {
         "id": file_data["id"],
         "type": "file",
-        "sub_type": file_data.get("sub_type", "document"),  # ✅ Add sub_type
+        "sub_type": file_data.get("sub_type", "document"),
         "name": file_data["name"],
         "file_id": file_data["file_id"],
         "caption": file_data["caption"],
         "visibility": file_data["visibility"],
         "row": next_row,
         "column": 0,
-        "created_by": int(user_id)
+        "created_by": created_by_val,
     }
+
+    # ✅ अगर premium_owner है तो भी include करो
+    if "premium_owner" in file_data:
+        final_file["premium_owner"] = int(file_data["premium_owner"])
 
     parent.setdefault("items", []).append(final_file)
 
     with open(data_file, "w") as f:
         json.dump(bot_data, f, indent=2)
 
+    # ✅ temp_data से साफ करना
     del temp_data[user_id]["files"][file_id]
     if not temp_data[user_id]["files"]:
         temp_data.pop(user_id)
@@ -2027,10 +2132,11 @@ async def confirm_file_callback(client, callback_query):
     with open(status_user_file, "w") as f:
         json.dump(status_data, f, indent=2)
 
-    # ✅ Folder open again
-    await callback_query.message.edit_caption("Please wait...") 
+    # ✅ Folder दुबारा दिखाना
+    await callback_query.message.edit_caption("Please wait...")
     kb = generate_folder_keyboard(parent, int(user_id))
-    save_data_file_to_mongo()
+    if not is_termux:
+      save_data_file_to_mongo()
     await callback_query.message.edit_caption("✅ फ़ाइल सफलतापूर्वक सेव हो गई 📂", reply_markup=kb)
 def find_folder_id_of_item(folder, target_id):
     for item in folder.get("items", []):
@@ -2081,6 +2187,7 @@ async def send_file_from_json(client, callback_query):
     visibility = file_data.get("visibility", "public")
     created_by = file_data.get("created_by")
     protect = visibility == "private"
+    premium_owner = file_data.get("premium_owner", "")
 
     chat_id = callback_query.message.chat.id
     unlock_base_url = DEPLOY_URL.rstrip("/") + f"/unlock_file"
@@ -2124,14 +2231,21 @@ async def send_file_from_json(client, callback_query):
 
             # 🔗 Build unlock URL
             import urllib.parse
-            unlock_url = (
-                "https://geetasaini2042.github.io/Ru/Premium/unlock.html?"
+            base_unlock = "https://geetasaini2042.github.io/Ru/Premium/unlock.html?"
+
+            # अगर premium_owner है तो unlock_base_url बदल दो
+            if premium_owner:
+                unlock_base_url = DEPLOY_URL.rstrip("/") + f"/unlock_users_file"
+
+            unlock_params = (
                 f"uuid={urllib.parse.quote_plus(file_uuid)}"
                 f"&file_name={urllib.parse.quote_plus(name)}"
                 f"&file_des={urllib.parse.quote_plus(caption)}"
                 f"&file_size={urllib.parse.quote_plus(readable_size)}"
                 f"&url={urllib.parse.quote_plus(unlock_base_url)}"
-             )
+            )
+
+            unlock_url = base_unlock + unlock_params
 
             # 💬 User-facing unlock message
             unlock_msg = f"""🔐 **Exclusive Premium File**
@@ -2150,7 +2264,12 @@ It helps us keep the content accessible for everyone. Thank you for your support
 
             buttons = [
                 [InlineKeyboardButton("🔓 Unlock this file", web_app=WebAppInfo(url=unlock_url))]
-            ]
+               ]
+            if user_id in ADMINS() or user_id == created_by or user_id == premium_owner:
+                folder_id = find_folder_id_of_item(root, file_uuid)
+                buttons.append([
+                    InlineKeyboardButton("✏️ Edit Item", callback_data=f"edit_item_file:{folder_id}:{file_uuid}")
+                 ])
             await callback_query.message.reply(unlock_msg, reply_markup=InlineKeyboardMarkup(buttons))
             await callback_query.answer()
 
@@ -2161,7 +2280,7 @@ It helps us keep the content accessible for everyone. Thank you for your support
 
     # ✅ Non-VIP file handling (with optional edit button)
     buttons = []
-    if user_id in ADMINS() or user_id == created_by:
+    if user_id in ADMINS() or user_id == created_by or user_id == premium_owner:
         folder_id = find_folder_id_of_item(root, file_uuid)
         buttons.append([
             InlineKeyboardButton("✏️ Edit Item", callback_data=f"edit_item_file:{folder_id}:{file_uuid}")
@@ -2182,6 +2301,8 @@ It helps us keep the content accessible for everyone. Thank you for your support
         await callback_query.message.reply(f"❌ Error sending file: {e}")
 
     await callback_query.answer()
+
+
 @app.on_callback_query(filters.regex(r"^edit_item_file:(.+):(.+)$"))
 async def edit_item_file_handler(client, callback_query):
     folder_id, file_uuid = callback_query.data.split(":")[1:]
@@ -2675,7 +2796,8 @@ async def copy_done_handler(client, callback_query):
 
     await callback_query.answer("✅ Copied successfully")
     await callback_query.message.edit_text("Please Wait...")
-    save_data_file_to_mongo()
+    if not is_termux:
+      save_data_file_to_mongo()
     markup = generate_folder_keyboard(dest_folder, user_id)
     await callback_query.message.edit_text(
         "✅ Copied successfully!",
@@ -2691,3 +2813,5 @@ def find_parent_folder(root, child_id):
             if item.get("type") == "folder":
                 stack.append(item)
     return None
+
+

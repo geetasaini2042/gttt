@@ -4,7 +4,7 @@ from config import save_mongodb_data_to_file ,find_parent_of_parent,save_mongodb
 from pymongo import MongoClient
 from flask import Flask, request, jsonify,abort
 from bson import json_util
-from common_data import data_file,data_file1, API_ID, API_HASH,BOT_TOKEN, MD_URI, BASE_PATH,DEPLOY_URL,users_file
+from common_data import data_file,data_file1, API_ID, API_HASH,BOT_TOKEN, MD_URI, BASE_PATH,DEPLOY_URL,users_file, LIKED_FILE, DISLIKED_FILE, PDF_VIEWS_FILE 
 import requests 
 app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 import logging
@@ -252,7 +252,45 @@ def upload_app123():
     upload_users()
     upload_json_to_mongodb()
     return "uploded"
+    
+def export_all_to_json():
+    client = MongoClient(MD_URI)
+    db = client["bot_database"]
+    collection = db["reactions"]
 
+    try:
+        liked_data = {}
+        disliked_data = {}
+        pdf_views_data = {}
+
+        for doc in collection.find():
+            uuid = doc.get("uuid")
+            likes = doc.get("likes", [])
+            dislikes = doc.get("dislikes", [])
+            views = doc.get("views", [])  # Assuming views stored as list in MongoDB
+
+            liked_data[uuid] = likes
+            disliked_data[uuid] = dislikes
+            pdf_views_data[uuid] = views
+
+        # Write liked.json
+        os.makedirs(os.path.dirname(LIKED_FILE), exist_ok=True)
+        with open(LIKED_FILE, "w", encoding="utf-8") as f:
+            json.dump(liked_data, f, indent=4, ensure_ascii=False)
+        logging.info("✅ liked.json saved successfully.")
+
+        # Write disliked.json
+        with open(DISLIKED_FILE, "w", encoding="utf-8") as f:
+            json.dump(disliked_data, f, indent=4, ensure_ascii=False)
+        logging.info("✅ disliked.json saved successfully.")
+
+        # Write PDF_VIEWS_FILE.json
+        with open(PDF_VIEWS_FILE, "w", encoding="utf-8") as f:
+            json.dump(pdf_views_data, f, indent=4, ensure_ascii=False)
+        logging.info("✅ PDF_VIEWS_FILE.json saved successfully.")
+
+    except Exception as e:
+        logging.error(f"❌ Failed to export reactions/views: {e}")
 
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 
@@ -301,6 +339,7 @@ def run_bot():
     is_termux = os.getenv("is_termux", "false").lower() == "true"
 
     if not is_termux:
+        export_all_to_json()
         save_mongodb_users_to_file()
         save_mongodb_data_to_file()
         download_from_mongodb()
