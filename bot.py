@@ -10,6 +10,18 @@ from collections import defaultdict
 from filters.status_filters import StatusFilter
 from uuid import uuid4
 
+@app.on_message(filters.command("update") & filters.private)
+async def update_data_on_md(client, message):
+    user_id = message.from_user.id
+    if user_id not in ADMINS():
+        return
+    if not is_termux:
+       a = message.reply_text("Please Wait.. Saving On MongoDB 2 Files :/n/n1. bot_data.json/n2. commands_data.json")
+       save_data_file1_to_mongo()
+       a.edit_text("1 File Processed. Starting 2nd...")
+       save_data_file_to_mongo()
+       a.edit_text("All Files Saved")
+
 async def save_user(client, user_id: int):
     try:
         with open(users_file, "r") as f:
