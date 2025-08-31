@@ -11,7 +11,7 @@ from filters.status_filters import StatusFilter
 from uuid import uuid4
 
 @app.on_message(filters.command("update") & filters.private)
-async def update_data_on_md(client, message):
+def update_data_on_md(client, message):
     user_id = message.from_user.id
     if user_id not in ADMINS():
         return
