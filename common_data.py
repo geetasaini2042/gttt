@@ -12,6 +12,8 @@ DEPLOY_URL_UPLOAD = os.getenv("URL", "http://127.0.0.1:5000/upload-data")
 OWNER = int(os.getenv("OWNER", 6150091802))
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 data_file = os.path.join(BASE_PATH, "bot_data.json")
+BOT_DATA_FILE = data_file
+DATA_FILE = data_file
 data_file1 = os.path.join(BASE_PATH, "commands_data.json")
 status_user_file = os.path.join(BASE_PATH, "status_user.json")
 temp_folder_file = os.path.join(BASE_PATH, "tempfolder.json")
@@ -27,6 +29,9 @@ DEPLOY_URL = os.getenv("URL", "http://127.0.0.1:5000").removesuffix("/upload-dat
 LIKED_FILE  = os.path.join(BASE_PATH, "PRE/liked.json")
 DISLIKED_FILE = os.path.join(BASE_PATH, "PRE/disliked.json")
 PDF_VIEWS_FILE = os.path.join(BASE_PATH, "PRE/PDF_VIEWS_FILE.json")
+pre_file = os.path.join(BASE_PATH, "pre_files_over.json")
+DELETED_PDF_FILE = os.path.join(BASE_PATH, "deleted_user_files.json")
+WITHDRAW_FILE = os.path.join(BASE_PATH, "user_withdrawal_details.json")
 def ADMINS():
      try:
          with open(ADMINS_FILE, "r") as f:

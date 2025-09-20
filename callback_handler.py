@@ -2,7 +2,7 @@ from script import app, get_created_by_from_folder, is_user_action_allowed,save_
 import json, re, os, requests, uuid
 from typing import Union
 from pyrogram.errors import RPCError
-from common_data import data_file, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL_UPLOAD,ADMINS, FILE_LOGS,DEPLOY_URL, PREMIUM_CHECK_LOG, send_startup_message_once, is_termux
+from common_data import data_file, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL_UPLOAD,ADMINS, FILE_LOGS,DEPLOY_URL, PREMIUM_CHECK_LOG, send_startup_message_once, is_termux, pre_file
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, InputMediaDocument, Message
 from collections import defaultdict
@@ -2013,10 +2013,9 @@ async def handle_premium_owner_id(client, message):
         await message.reply_text("⚠️ File data नहीं मिला, कृपया फिर से add करें।")
         return
 
-    # बस yahi par append/update karna hai
+    # premium_owner update
     temp_data[user_id]["files"][file_uuid]["premium_owner"] = new_owner_id  
 
-    # बाकी data untouched रहेगा
     with open(temp_file_json, "w") as f:
         json.dump(temp_data, f, indent=2)
 
@@ -2044,7 +2043,7 @@ async def handle_premium_owner_id(client, message):
         f"✅ Premium owner {new_owner_id} added for file {file_uuid}.",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
-######
+
 @app.on_callback_query(filters.regex(r"^confirm_file:(.+)$"))
 async def confirm_file_callback(client, callback_query):
     file_id = callback_query.data.split(":")[1]
@@ -2087,6 +2086,7 @@ async def confirm_file_callback(client, callback_query):
 
     existing_rows = [item.get("row", 0) for item in parent.get("items", [])]
     next_row = max(existing_rows, default=-1) + 1
+
     # ✅ created_by को premium_owner के हिसाब से सेट करना
     if "premium_owner" in file_data and file_data["premium_owner"]:
         created_by_val = int(file_data["premium_owner"])
@@ -2116,6 +2116,25 @@ async def confirm_file_callback(client, callback_query):
     with open(data_file, "w") as f:
         json.dump(bot_data, f, indent=2)
 
+    # ---- pre_files_over.json में save करना केवल premium_owner होने पर ----
+    if "premium_owner" in file_data and file_data["premium_owner"]:
+        try:
+            with open(pre_file, "r") as f:
+                pre_files_data = json.load(f)
+        except FileNotFoundError:
+            pre_files_data = {}
+
+        owner_key = str(file_data["premium_owner"])
+
+        if owner_key not in pre_files_data:
+            pre_files_data[owner_key] = []
+
+        if file_id not in pre_files_data[owner_key]:
+            pre_files_data[owner_key].append(file_id)
+
+        with open(pre_file, "w") as f:
+            json.dump(pre_files_data, f, indent=2)
+
     # ✅ temp_data से साफ करना
     del temp_data[user_id]["files"][file_id]
     if not temp_data[user_id]["files"]:
@@ -2136,8 +2155,11 @@ async def confirm_file_callback(client, callback_query):
     await callback_query.message.edit_caption("Please wait...")
     kb = generate_folder_keyboard(parent, int(user_id))
     if not is_termux:
-      save_data_file_to_mongo()
-    await callback_query.message.edit_caption("✅ फ़ाइल सफलतापूर्वक सेव हो गई 📂", reply_markup=kb)
+        save_data_file_to_mongo()
+    await callback_query.message.edit_caption(
+        f"FILE SAVED SUCCESSFULLY \n**File uuid**: {file_data['id']}",
+        reply_markup=kb
+    )
 def find_folder_id_of_item(folder, target_id):
     for item in folder.get("items", []):
         if item.get("id") == target_id:
@@ -2248,7 +2270,18 @@ async def send_file_from_json(client, callback_query):
             unlock_url = base_unlock + unlock_params
 
             # 💬 User-facing unlock message
-            unlock_msg = f"""🔐 **Exclusive Premium File**
+            if premium_owner and int(user_id) == int(premium_owner):
+              unlock_msg = f"""**Hello Partner**,
+You are Making Money by this file.
+
+**📁 Name:** `{name}`  
+**📝 Description:** `{caption}`  
+**📦 Size:** `{readable_size}`
+** File uuid: `{file_uuid}`
+
+You can manage this file by command `/my_pdf {file_uuid}` """
+            else:
+              unlock_msg = f"""🔐 **Exclusive Premium File**
 
 **📁 Name:** `{name}`  
 **📝 Description:** `{caption}`  

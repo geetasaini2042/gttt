@@ -4,7 +4,7 @@ from config import save_mongodb_data_to_file ,find_parent_of_parent,save_mongodb
 from pymongo import MongoClient
 from flask import Flask, request, jsonify,abort
 from bson import json_util
-from common_data import data_file,data_file1, API_ID, API_HASH,BOT_TOKEN, MD_URI, BASE_PATH,DEPLOY_URL,users_file, LIKED_FILE, DISLIKED_FILE, PDF_VIEWS_FILE 
+from common_data import data_file,data_file1, API_ID, API_HASH,BOT_TOKEN, MD_URI, BASE_PATH,DEPLOY_URL,users_file, LIKED_FILE, DISLIKED_FILE, PDF_VIEWS_FILE, DELETED_PDF_FILE, pre_file,WITHDRAW_FILE
 import requests 
 app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 import logging
@@ -26,6 +26,32 @@ def safe_read_json(filepath):
         fcntl.flock(f, fcntl.LOCK_UN)
     return data
 
+def save_withdrawals_to_file():
+    client = MongoClient(MD_URI)
+    db = client["bot_database"]
+    collection = db["withdrawals"]
+
+    # MongoDB से सारे documents निकालो
+    all_data = collection.find()
+
+    # File format जैसा चाहिए वैसा dict बनाओ
+    file_data = {}
+    for doc in all_data:
+        user_id = doc.get("user_id")
+        if not user_id:
+            continue
+
+        file_data[user_id] = {
+            "total_withdrawn": int(doc.get("total_withdrawn_inr", 0)),  # INR में total निकलेगा
+            "requests": doc.get("requests", [])
+        }
+
+    # JSON file में save करो
+    with open(WITHDRAW_FILE, "w") as f:
+        json.dump(file_data, f, indent=2)
+
+    logging.info(f"✅ Withdrawals data saved to {WITHDRAW_FILE}")
+    
 @flask_app.route("/get-file/<path:filename>")
 def get_json_file(filename):
     if not filename.endswith(".json"):
@@ -335,6 +361,34 @@ from dotenv import load_dotenv
 
 load_dotenv()  # यह .env फ़ाइल लोड करता है
 
+def load_json1_files_from_mongo():
+
+    # MongoDB client
+    client = MongoClient(MD_URI)
+    db = client["bot_database"]
+
+    # ---- pre_files_over.json load ----
+    pre_data = {}
+    for doc in db["pre_files_over"].find({}):
+        owner_id = str(doc.get("owner_id"))
+        file_ids = doc.get("file_ids", [])
+        pre_data[owner_id] = file_ids
+
+    with open(pre_file, "w") as f:
+        json.dump(pre_data, f, indent=2)
+    logging.info("✅ pre_files_over.json loaded from MongoDB")
+
+    # ---- deleted_user_files.json load ----
+    deleted_data = {}
+    for doc in db["deleted_user_files"].find({}):
+        user_id = str(doc.get("user_id"))
+        file_ids = doc.get("file_ids", [])
+        deleted_data[user_id] = file_ids
+
+    with open(DELETED_PDF_FILE, "w") as f:
+        json.dump(deleted_data, f, indent=2)
+    logging.info("✅ deleted_user_files.json loaded from MongoDB")
+    
 def run_bot():
     is_termux = os.getenv("is_termux", "false").lower() == "true"
 
@@ -343,11 +397,14 @@ def run_bot():
         save_mongodb_users_to_file()
         save_mongodb_data_to_file()
         download_from_mongodb()
+        load_json1_files_from_mongo()
+        save_withdrawals_to_file()
     app.run()
     if not is_termux:
       requests.post(DEPLOY_URL)
       upload_users()
       upload_json_to_mongodb()
+      save_json_files_to_mongo()
     logging.info("Stopped\n")
 def get_created_by_from_folder(folder_id):
     try:

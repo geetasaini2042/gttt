@@ -3,10 +3,10 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo, User
 from script import app, run_flask, run_bot,is_user_subscribed_requests, upload_users,save_data_file_to_mongo, save_data_file1_to_mongo
 from common_data import data_file,data_file1, users_file, status_user_file, temp_folder_file,temp_url_file,temp_webapp_file,temp_file_json, DEFAULT_JSON,OWNER,ADMINS,REQUIRED_CHANNELS,send_startup_message_once,is_termux
-import vip_from_user
+import vip_from_user, withdrawal, pdf_flask
+from pdf_anlysis import save_json_files_to_mongo
 from typing import Union
 from collections import defaultdict
-
 from filters.status_filters import StatusFilter
 from uuid import uuid4
 
@@ -16,12 +16,15 @@ def update_data_on_md(client, message):
     if user_id not in ADMINS():
         return
     if not is_termux:
-       a = message.reply_text("Please Wait.. Saving On MongoDB 2 Files :/n/n1. bot_data.json/n2. commands_data.json")
+       a = message.reply_text("Please Wait.. Saving On MongoDB 3 Files :/n/n1. bot_data.json/n2. commands_data.json")
        save_data_file1_to_mongo()
-       a.edit_text("1 File Processed. Starting 2nd...")
+       a.edit_text("1 File Processed(bot_data.json). Starting 2nd...")
        save_data_file_to_mongo()
+       a.edit_text("1 more Files Saved(commands_data.json)")
+       save_json_files_to_mongo()
+       a.edit_text("Files Saved:- PREMIUM FILE OVERVIEW")
+       save_withdrawals_to_mongo()
        a.edit_text("All Files Saved")
-
 async def save_user(client, user_id: int):
     try:
         with open(users_file, "r") as f:
