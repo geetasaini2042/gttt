@@ -291,9 +291,123 @@ async def paginate_users(client, callback_query):
 
     await callback_query.answer()
 
-from pyrogram import Client, filters
 
-@app.on_message(filters.command("start") & filters.regex(r"^/start$")) #& filters.private)
+
+def get_root_inline_keyboard_for_groups(user_id):
+    try:
+        with open(data_file, "r") as f:
+            content = f.read().strip()
+            if content == "{}":
+                with open(data_file, "w") as wf:
+                    json.dump(DEFAULT_JSON, wf, indent=2)
+                root = DEFAULT_JSON["data"]
+            else:
+                root = json.loads(content)["data"]
+    except (FileNotFoundError, KeyError, json.JSONDecodeError):
+        return InlineKeyboardMarkup([[InlineKeyboardButton("❌ No Data", callback_data="no_data")]])
+
+    layout = defaultdict(dict)
+
+    for item in root.get("items", []):
+        row = item.get("row", 0)
+        col = item.get("column", 0)
+        name = item.get("name", "❓")
+
+        button = None
+
+        # केवल folder, file और url के लिए बटन बनाएं
+        if item["type"] == "folder":
+            button = InlineKeyboardButton(f"{name}", callback_data=f"open:{item['id']}")
+        elif item["type"] == "file":
+            button = InlineKeyboardButton(f"{name}", callback_data=f"file:{item['id']}")
+        elif item["type"] == "url":
+            url = item.get("url", "#")
+            button = InlineKeyboardButton(f"{name}", url=url)
+        # web_app को group में न दिखाएं
+        # elif item["type"] == "webapp":
+        #     continue
+
+        if button:
+            layout[row][col] = button
+
+    # 📐 Convert layout to button rows
+    buttons = []
+    for row in sorted(layout.keys()):
+        cols = layout[row]
+        button_row = [cols[col] for col in sorted(cols.keys())]
+        buttons.append(button_row)
+
+    # 🔧 Add Controls for Admins or allowed users
+    if user_id in ADMINS():
+        buttons.append([
+            InlineKeyboardButton("➕ Add File", callback_data="add_file:root"),
+            InlineKeyboardButton("📁 Add Folder", callback_data="add_folder:root")
+        ])
+        buttons.append([
+            InlineKeyboardButton("🧩 Add WebApp", callback_data="add_webapp:root"),
+            InlineKeyboardButton("🔗 Add URL", callback_data="add_url:root")
+        ])
+        buttons.append([
+            InlineKeyboardButton("✏️ Edit Folder Layout", callback_data="edit1_item1:root")
+        ])
+    else:
+        allow = root.get("user_allow", [])
+        user_buttons = []
+
+        if "add_file" in allow:
+            user_buttons.append(InlineKeyboardButton("➕ Add File", callback_data="add_file:root"))
+        if "add_folder" in allow:
+            user_buttons.append(InlineKeyboardButton("📁 Add Folder", callback_data="add_folder:root"))
+        if "add_webapp" in allow:
+            # web_app group में नहीं दिखाना
+            pass
+        if "add_url" in allow:
+            user_buttons.append(InlineKeyboardButton("🔗 Add URL", callback_data="add_url:root"))
+
+        for i in range(0, len(user_buttons), 2):
+            buttons.append(user_buttons[i:i+2])
+
+    return InlineKeyboardMarkup(buttons)
+    
+@app.on_message(filters.command("start") & filters.group)
+async def start_handler(client, message: Message):
+    user = message.from_user
+    user_id = user.id
+    await save_user(client, user_id)
+    await send_startup_message_once()
+    
+    try:
+        with open(data_file, "r") as f:
+            bot_data = json.load(f)
+    except (FileNotFoundError, KeyError, json.JSONDecodeError):
+        bot_data = DEFAULT_JSON
+
+    root = bot_data.get("data", {})
+    template = root.get("description", "👋 Welcome to **SingodiyaTech**!")
+
+    # 🔄 Placeholder Replacement
+    user_data = {
+        "first_name": user.first_name or "",
+        "last_name": user.last_name or "",
+        "full_name": f"{user.first_name or ''} {user.last_name or ''}".strip(),
+        "id": str(user.id),
+        "username": user.username or "",
+        "mention": f"[{user.first_name}](tg://user?id={user.id})",
+        "link": f"tg://user?id={user.id}"
+    }
+
+    for key, value in user_data.items():
+        template = template.replace(f"${{{key}}}", value)
+
+    welcome_text = template
+    markup = get_root_inline_keyboard_for_groups(user_id)
+
+    try:
+        await message.reply_text(welcome_text, reply_markup=markup)
+    except:
+        await message.reply_text(welcome_text)
+        
+@app.on_message(filters.command("start") & filters.regex(r"^/start$") & filters.private)
 async def start_handler(client, message: Message):
     user = message.from_user
     user_id = user.id
