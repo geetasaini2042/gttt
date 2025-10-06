@@ -23,7 +23,53 @@ def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
         print(f"⚠ Unexpected error: {e}")
     return None
 
-@app.on_callback_query(filters.regex("^open:"))
+@app.on_callback_query(filters.regex("^open:") & filters.group)
+async def open_folder_handler(client, callback_query):
+    user = callback_query.from_user
+    user_id = user.id
+    print("open:")
+
+    # callback_data format: "open:<folder_id>:<user_id>"
+    try:
+        _, folder_id, data_user_id = callback_query.data.split(":")
+    except ValueError:
+        await callback_query.answer("❌ Invalid request.", show_alert=True)
+        return
+
+    if str(user_id) != data_user_id:
+        await callback_query.answer(
+            "❌ This is not your request. Please send /start to get your own menu.", 
+            show_alert=True
+        )
+        return
+
+    full_data = load_bot_data()
+    if not full_data:
+        await callback_query.message.edit_text("❌ Bot data not found.")
+        return
+
+    root_folder = full_data.get("data", {})
+    folder = find_folder_by_id(root_folder, folder_id)
+
+    if not folder:
+        await callback_query.answer("❌ Folder not found.", show_alert=True)
+        return
+
+    # Description with placeholder replacement
+    raw_text = folder.get("description", "Hello 👋👋👋👋📖📖")
+    text = raw_text\
+        .replace("${first_name}", user.first_name or "")\
+        .replace("${last_name}", user.last_name or "")\
+        .replace("${full_name}", f"{user.first_name or ''} {user.last_name or ''}".strip())\
+        .replace("${id}", str(user.id))\
+        .replace("${username}", user.username or "")\
+        .replace("${mention}", f"[{user.first_name}](tg://user?id={user.id})")\
+        .replace("${link}", f"tg://user?id={user.id}")
+
+    markup = generate_folder_keyboard_for_groups(folder, user_id)
+    await callback_query.message.edit_text(text, reply_markup=markup)
+    
+@app.on_callback_query(filters.regex("^open:") & filters.private)
 async def open_folder_handler(client, callback_query):
     user = callback_query.from_user
     user_id = user.id
@@ -135,6 +181,76 @@ def generate_folder_keyboard(folder: dict, user_id: int):
     parent_id = folder.get("parent_id")
     if parent_id:
         sorted_rows.append([InlineKeyboardButton("🔙Back", callback_data=f"open:{parent_id}")])
+
+    return InlineKeyboardMarkup(sorted_rows)
+def generate_folder_keyboard_for_groups(folder: dict, user_id: int):
+    layout = defaultdict(dict)
+    folder_id = folder.get("id", "unknown")
+
+    for item in folder.get("items", []):
+        row = item.get("row", 0)
+        col = item.get("column", 0)
+        name = item.get("name", "❓")
+
+        button = None
+
+        # folder, file, url only (skip web_app)
+        if item["type"] == "folder":
+            cb_data = f"open:{item['id']}:{user_id}"
+            button = InlineKeyboardButton(f"{name}", callback_data=cb_data)
+
+        elif item["type"] == "file":
+            cb_data = f"file:{item['id']}:{user_id}"
+            button = InlineKeyboardButton(f"{name}", callback_data=cb_data)
+
+        elif item["type"] == "url":
+            real_url = item.get("url", "#")
+            button = InlineKeyboardButton(f"{name}", url=real_url)
+
+        # web_app ignored for groups
+
+        if button:
+            layout[row][col] = button
+
+    # ⬇️ Convert to sorted rows
+    sorted_rows = []
+    for row in sorted(layout.keys()):
+        button_row = [layout[row][col] for col in sorted(layout[row].keys())]
+        sorted_rows.append(button_row)
+
+    # ➕ Add Buttons for Admins or creator
+    if user_id in ADMINS() or get_created_by_from_folder(folder_id) == user_id:
+        sorted_rows.append([
+            InlineKeyboardButton("➕ Add File", callback_data=f"add_file:{folder_id}:{user_id}"),
+            InlineKeyboardButton("📁 Add Folder", callback_data=f"add_folder:{folder_id}:{user_id}")
+        ])
+        sorted_rows.append([
+            InlineKeyboardButton("🔗 Add URL", callback_data=f"add_url:{folder_id}:{user_id}")
+        ])
+    else:
+        allow = folder.get("user_allow", [])
+        user_buttons = []
+
+        if "add_file" in allow:
+            user_buttons.append(InlineKeyboardButton("➕ Add File", callback_data=f"add_file:{folder_id}:{user_id}"))
+        if "add_folder" in allow:
+            user_buttons.append(InlineKeyboardButton("📁 Add Folder", callback_data=f"add_folder:{folder_id}:{user_id}"))
+        if "add_url" in allow:
+            user_buttons.append(InlineKeyboardButton("🔗 Add URL", callback_data=f"add_url:{folder_id}:{user_id}"))
+
+        for i in range(0, len(user_buttons), 2):
+            sorted_rows.append(user_buttons[i:i+2])
+
+    # ✏️ Edit Button
+    if user_id in ADMINS() or folder.get("created_by") == user_id:
+        sorted_rows.append([
+            InlineKeyboardButton("✏️ Edit Folder Layout", callback_data=f"edit1_item1:{folder_id}:{user_id}")
+        ])
+
+    # 🔙 Back
+    parent_id = folder.get("parent_id")
+    if parent_id:
+        sorted_rows.append([InlineKeyboardButton("🔙Back", callback_data=f"open:{parent_id}:{user_id}")])
 
     return InlineKeyboardMarkup(sorted_rows)
 def find_folder_by_id(current_folder: dict, target_id: str):
