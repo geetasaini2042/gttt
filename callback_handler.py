@@ -22,9 +22,13 @@ def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
     except Exception as e:
         print(f"⚠ Unexpected error: {e}")
     return None
+from pyrogram import filters
 
-@app.on_callback_query(filters.regex("^open:") & filters.group)
-async def open_folder_handler(client, callback_query):
+group_callback = filters.create(lambda _, __, query: query.message.chat.type in ["group", "supergroup"])
+
+@app.on_callback_query(filters.regex("^open:") & group_callback)
+
+async def open_folder_handler_for_group(client, callback_query):
     user = callback_query.from_user
     user_id = user.id
     print("open:")
