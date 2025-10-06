@@ -219,35 +219,6 @@ def generate_folder_keyboard_for_groups(folder: dict, user_id: int):
         sorted_rows.append(button_row)
 
     # ➕ Add Buttons for Admins or creator
-    if user_id in ADMINS() or get_created_by_from_folder(folder_id) == user_id:
-        sorted_rows.append([
-            InlineKeyboardButton("➕ Add File", callback_data=f"add_file:{folder_id}:{user_id}"),
-            InlineKeyboardButton("📁 Add Folder", callback_data=f"add_folder:{folder_id}:{user_id}")
-        ])
-        sorted_rows.append([
-            InlineKeyboardButton("🔗 Add URL", callback_data=f"add_url:{folder_id}:{user_id}")
-        ])
-    else:
-        allow = folder.get("user_allow", [])
-        user_buttons = []
-
-        if "add_file" in allow:
-            user_buttons.append(InlineKeyboardButton("➕ Add File", callback_data=f"add_file:{folder_id}:{user_id}"))
-        if "add_folder" in allow:
-            user_buttons.append(InlineKeyboardButton("📁 Add Folder", callback_data=f"add_folder:{folder_id}:{user_id}"))
-        if "add_url" in allow:
-            user_buttons.append(InlineKeyboardButton("🔗 Add URL", callback_data=f"add_url:{folder_id}:{user_id}"))
-
-        for i in range(0, len(user_buttons), 2):
-            sorted_rows.append(user_buttons[i:i+2])
-
-    # ✏️ Edit Button
-    if user_id in ADMINS() or folder.get("created_by") == user_id:
-        sorted_rows.append([
-            InlineKeyboardButton("✏️ Edit Folder Layout", callback_data=f"edit1_item1:{folder_id}:{user_id}")
-        ])
-
-    # 🔙 Back
     parent_id = folder.get("parent_id")
     if parent_id:
         sorted_rows.append([InlineKeyboardButton("🔙Back", callback_data=f"open:{parent_id}:{user_id}")])
