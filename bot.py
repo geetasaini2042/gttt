@@ -304,7 +304,7 @@ def get_root_inline_keyboard_for_groups(user_id):
             else:
                 root = json.loads(content)["data"]
     except (FileNotFoundError, KeyError, json.JSONDecodeError):
-        return InlineKeyboardMarkup([[InlineKeyboardButton("❌ No Data", callback_data="no_data")]])
+        return InlineKeyboardMarkup([[InlineKeyboardButton("❌ No Data", callback_data=f"no_data:{user_id}")]])
 
     layout = defaultdict(dict)
 
@@ -317,9 +317,9 @@ def get_root_inline_keyboard_for_groups(user_id):
 
         # केवल folder, file और url के लिए बटन बनाएं
         if item["type"] == "folder":
-            button = InlineKeyboardButton(f"{name}", callback_data=f"open:{item['id']}")
+            button = InlineKeyboardButton(f"{name}", callback_data=f"open:{item['id']}:{user_id}")
         elif item["type"] == "file":
-            button = InlineKeyboardButton(f"{name}", callback_data=f"file:{item['id']}")
+            button = InlineKeyboardButton(f"{name}", callback_data=f"file:{item['id']}:{user_id}")
         elif item["type"] == "url":
             url = item.get("url", "#")
             button = InlineKeyboardButton(f"{name}", url=url)
@@ -336,36 +336,6 @@ def get_root_inline_keyboard_for_groups(user_id):
         cols = layout[row]
         button_row = [cols[col] for col in sorted(cols.keys())]
         buttons.append(button_row)
-
-    # 🔧 Add Controls for Admins or allowed users
-    if user_id in ADMINS():
-        buttons.append([
-            InlineKeyboardButton("➕ Add File", callback_data="add_file:root"),
-            InlineKeyboardButton("📁 Add Folder", callback_data="add_folder:root")
-        ])
-        buttons.append([
-            InlineKeyboardButton("🧩 Add WebApp", callback_data="add_webapp:root"),
-            InlineKeyboardButton("🔗 Add URL", callback_data="add_url:root")
-        ])
-        buttons.append([
-            InlineKeyboardButton("✏️ Edit Folder Layout", callback_data="edit1_item1:root")
-        ])
-    else:
-        allow = root.get("user_allow", [])
-        user_buttons = []
-
-        if "add_file" in allow:
-            user_buttons.append(InlineKeyboardButton("➕ Add File", callback_data="add_file:root"))
-        if "add_folder" in allow:
-            user_buttons.append(InlineKeyboardButton("📁 Add Folder", callback_data="add_folder:root"))
-        if "add_webapp" in allow:
-            # web_app group में नहीं दिखाना
-            pass
-        if "add_url" in allow:
-            user_buttons.append(InlineKeyboardButton("🔗 Add URL", callback_data="add_url:root"))
-
-        for i in range(0, len(user_buttons), 2):
-            buttons.append(user_buttons[i:i+2])
 
     return InlineKeyboardMarkup(buttons)
     
