@@ -290,7 +290,13 @@ async def paginate_users(client, callback_query):
         await callback_query.message.edit_text("❌ No active users on this page.")
 
     await callback_query.answer()
-@app.on_message(filters.command("start") & filters.regex(r"^/start$") & filters.private)
+
+from pyrogram import Client, filters
+
+@app.on_message(
+    filters.command("start") &
+    filters.regex(lambda _, __, msg: msg.text == "/start" or msg.text == f"/start@{_.me.username}") &
+    (filters.private | filters.group))
 async def start_handler(client, message: Message):
     user = message.from_user
     user_id = user.id
