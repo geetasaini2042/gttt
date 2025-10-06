@@ -22,7 +22,6 @@ def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
     except Exception as e:
         print(f"⚠ Unexpected error: {e}")
     return None
-from pyrogram import filters
 
 group_callback = filters.create(lambda _, __, query: query.message.chat.type in ["group", "supergroup"])
 
