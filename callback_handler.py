@@ -2286,6 +2286,178 @@ import pytz  # Make sure this is installed: pip install pytz
 
 @app.on_callback_query(filters.regex(r"^file:(.+)$"))
 async def send_file_from_json(client, callback_query):
+    try:
+        data_parts = callback_query.data.split(":")
+        file_uuid = data_parts[1]
+        user_id = callback_query.from_user.id
+        chat = callback_query.message.chat
+
+        # 🧩 अगर callback group में आया है
+        if chat.type in ["group", "supergroup"]:
+            # ✅ Check करें कि callback_data में original user id मौजूद है
+            if len(data_parts) < 3:
+                await callback_query.answer("❌ Invalid file request.", show_alert=True)
+                return
+
+            original_user_id = int(data_parts[2])
+
+            # ✅ अगर किसी और user ने click किया
+            if original_user_id != user_id:
+                await callback_query.answer("⚠️ यह फ़ाइल केवल उसी उपयोगकर्ता के लिए है जिसने इसे अनुरोध किया था।", show_alert=True)
+                return
+
+            # ✅ अब सही user को redirect करें private chat में
+            bot_username = (await client.get_me()).username
+            start_url = f"https://t.me/{bot_username}?start={file_uuid}"
+            await callback_query.answer(url=start_url)
+            return  # Group में बस redirect दो, file मत भेजो
+
+        # 🧩 अगर private chat में आया है तो असली फ़ाइल भेजो
+        try:
+            with open(data_file) as f:
+                bot_data = json.load(f)
+        except Exception as e:
+            await callback_query.answer(f"❌ Data file not found: {e}", show_alert=True)
+            return
+
+        root = bot_data.get("data", {})
+        file_data = find_item_by_id(root, file_uuid)
+
+        if not file_data or file_data.get("type") != "file":
+            await callback_query.answer("❌ File not found.", show_alert=True)
+            return
+
+        file_id = file_data["file_id"]
+        name = file_data.get("name", "Unnamed")
+        caption = file_data.get("caption", name)
+        sub_type = file_data.get("sub_type", "document")
+        visibility = file_data.get("visibility", "public")
+        created_by = file_data.get("created_by")
+        protect = visibility == "private"
+        premium_owner = file_data.get("premium_owner", "")
+        chat_id = callback_query.message.chat.id
+
+        # Unlock URLs
+        unlock_base_url = DEPLOY_URL.rstrip("/") + f"/unlock_file"
+
+        # 🔐 Handle VIP File
+        if visibility == "vip":
+            try:
+                temp_method = getattr(client, f"send_{sub_type}", client.send_document)
+                media_arg = {sub_type if sub_type in ["photo", "video", "audio"] else "document": file_id}
+
+                user = callback_query.from_user
+                full_name = (user.first_name or "") + (" " + user.last_name if user.last_name else "")
+                username = f"@{user.username}" if user.username else "N/A"
+                india_time = datetime.now(pytz.timezone("Asia/Kolkata")).strftime('%Y-%m-%d %H:%M:%S')
+
+                user_info = f"👤 **Name:** {full_name}\n🆔 **User ID:** `{user.id}`\n🔗 **Username:** {username}\n🕒 **Time:** {india_time}"
+                file_info = f"📁 **File Name:** {name}\n📝 **Description:** {caption}"
+                combined_caption = f"🔐 **VIP File Access Attempt**\n\n{user_info}\n\n{file_info}"
+
+                sent_msg = await temp_method(
+                    chat_id=PREMIUM_CHECK_LOG,
+                    caption=combined_caption,
+                    **media_arg
+                )
+
+                file_size = None
+                if sub_type == "document" and sent_msg.document:
+                    file_size = sent_msg.document.file_size
+                elif sub_type == "video" and sent_msg.video:
+                    file_size = sent_msg.video.file_size
+                elif sub_type == "audio" and sent_msg.audio:
+                    file_size = sent_msg.audio.file_size
+
+                readable_size = f"{round(file_size / (1024 * 1024), 2)} MB" if file_size else "Unknown"
+
+                import urllib.parse
+                base_unlock = "https://reward.edumate.life/Premium/unlock.html?"
+
+                # अगर premium_owner है तो unlock_base_url बदल दो
+                if premium_owner:
+                    unlock_base_url = DEPLOY_URL.rstrip("/") + f"/unlock_users_file"
+
+                unlock_params = (
+                    f"uuid={urllib.parse.quote_plus(file_uuid)}"
+                    f"&file_name={urllib.parse.quote_plus(name)}"
+                    f"&file_des={urllib.parse.quote_plus(caption)}"
+                    f"&file_size={urllib.parse.quote_plus(readable_size)}"
+                    f"&url={urllib.parse.quote_plus(unlock_base_url)}"
+                )
+
+                unlock_url = base_unlock + unlock_params
+
+                # 💬 Unlock message
+                if premium_owner and int(user_id) == int(premium_owner):
+                    unlock_msg = f"""**Hello Partner**,  
+You are Making Money by this file.
+
+**📁 Name:** `{name}`  
+**📝 Description:** `{caption}`  
+**📦 Size:** `{readable_size}`  
+**🆔 File UUID:** `{file_uuid}`
+
+Manage this file with command `/my_pdf {file_uuid}`"""
+                else:
+                    unlock_msg = f"""🔐 **Exclusive Premium File**
+
+**📁 Name:** `{name}`  
+**📝 Description:** `{caption}`  
+**📦 Size:** `{readable_size}`
+
+To unlock this file, tap **Unlock Now** below and view a short ad. 🙏
+👇"""
+
+                buttons = [
+                    [InlineKeyboardButton("🔓 Unlock this file", web_app=WebAppInfo(url=unlock_url))]
+                ]
+                if user_id in ADMINS() or user_id == created_by or user_id == premium_owner:
+                    folder_id = find_folder_id_of_item(root, file_uuid)
+                    buttons.append([
+                        InlineKeyboardButton("✏️ Edit Item", callback_data=f"edit_item_file:{folder_id}:{file_uuid}")
+                    ])
+
+                await callback_query.message.reply(
+                    unlock_msg,
+                    reply_markup=InlineKeyboardMarkup(buttons)
+                )
+                await callback_query.answer()
+
+            except Exception as e:
+                await callback_query.message.reply(f"❌ Failed to prepare VIP file: {e}")
+                await callback_query.answer()
+            return
+
+        # ✅ Non-VIP file handling
+        buttons = []
+        if user_id in ADMINS() or user_id == created_by or user_id == premium_owner:
+            folder_id = find_folder_id_of_item(root, file_uuid)
+            buttons.append([
+                InlineKeyboardButton("✏️ Edit Item", callback_data=f"edit_item_file:{folder_id}:{file_uuid}")
+            ])
+
+        try:
+            method = getattr(client, f"send_{sub_type}", client.send_document)
+            media_arg = {sub_type if sub_type in ["photo", "video", "audio"] else "document": file_id}
+            await method(
+                chat_id=chat_id,
+                caption=caption,
+                protect_content=protect,
+                reply_markup=InlineKeyboardMarkup(buttons) if buttons else None,
+                **media_arg
+            )
+        except Exception as e:
+            await callback_query.message.reply(f"❌ Error sending file: {e}")
+
+        await callback_query.answer()
+
+    except Exception as e:
+        print(f"⚠️ Callback Error: {e}")
+        await callback_query.answer(f"❌ Unexpected error: {e}", show_alert=True)
+        """
+@app.on_callback_query(filters.regex(r"^file:(.+)$"))
+async def send_file_from_json(client, callback_query):
     file_uuid = callback_query.data.split(":")[1]
     user_id = callback_query.from_user.id
 
@@ -2438,7 +2610,7 @@ It helps us keep the content accessible for everyone. Thank you for your support
 
     await callback_query.answer()
 
-
+"""
 @app.on_callback_query(filters.regex(r"^edit_item_file:(.+):(.+)$"))
 async def edit_item_file_handler(client, callback_query):
     folder_id, file_uuid = callback_query.data.split(":")[1:]
