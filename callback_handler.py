@@ -23,29 +23,29 @@ def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
         print(f"⚠ Unexpected error: {e}")
     return None
 
-group_callback = filters.create(lambda _, __, query: query.message.chat.type in ["group", "supergroup"])
-
-@app.on_callback_query(filters.regex("^open:") & group_callback)
-
-async def open_folder_handler_for_group(client, callback_query):
+@app.on_callback_query(filters.regex("^open:"))
+async def open_folder_handler(client, callback_query):
     user = callback_query.from_user
     user_id = user.id
-    print("open:")
 
-    # callback_data format: "open:<folder_id>:<user_id>"
-    try:
-        _, folder_id, data_user_id = callback_query.data.split(":")
-    except ValueError:
-        await callback_query.answer("❌ Invalid request.", show_alert=True)
-        return
+    parts = callback_query.data.split(":")
+    folder_id = parts[1] if len(parts) > 1 else None
+    passed_user_id = int(parts[2]) if len(parts) > 2 else None  # केवल group के लिए उपयोग होगा
 
-    if str(user_id) != data_user_id:
+    chat = callback_query.message.chat
+    is_group = chat.type in ["group", "supergroup"]
+
+    print(f"🧩 open: folder={folder_id}, from_user={user_id}, passed_user={passed_user_id}, group={is_group}")
+
+    # ✅ अगर group में है और user_id mismatch है तो alert दिखाओ
+    if is_group and passed_user_id and passed_user_id != user_id:
         await callback_query.answer(
-            "❌ This is not your request. Please send /start to get your own menu.", 
+            "⚠️ This button belongs to another user.\nPlease send /start to get your own menu.",
             show_alert=True
         )
         return
 
+    # 🧠 डेटा लोड करना
     full_data = load_bot_data()
     if not full_data:
         await callback_query.message.edit_text("❌ Bot data not found.")
@@ -58,20 +58,31 @@ async def open_folder_handler_for_group(client, callback_query):
         await callback_query.answer("❌ Folder not found.", show_alert=True)
         return
 
-    # Description with placeholder replacement
-    raw_text = folder.get("description", "Hello 👋👋👋👋📖📖")
-    text = raw_text\
-        .replace("${first_name}", user.first_name or "")\
-        .replace("${last_name}", user.last_name or "")\
-        .replace("${full_name}", f"{user.first_name or ''} {user.last_name or ''}".strip())\
-        .replace("${id}", str(user.id))\
-        .replace("${username}", user.username or "")\
-        .replace("${mention}", f"[{user.first_name}](tg://user?id={user.id})")\
+    # 🔤 Description placeholders replace करना
+    raw_text = folder.get("description", "Hello 👋📚")
+    text = (
+        raw_text
+        .replace("${first_name}", user.first_name or "")
+        .replace("${last_name}", user.last_name or "")
+        .replace("${full_name}", f"{user.first_name or ''} {user.last_name or ''}".strip())
+        .replace("${id}", str(user.id))
+        .replace("${username}", user.username or "")
+        .replace("${mention}", f"[{user.first_name}](tg://user?id={user.id})")
         .replace("${link}", f"tg://user?id={user.id}")
+    )
 
-    markup = generate_folder_keyboard_for_groups(folder, user_id)
-    await callback_query.message.edit_text(text, reply_markup=markup)
-    
+    # 🔘 Group vs Private Keyboard Selection
+    if is_group:
+        markup = generate_folder_keyboard_for_groups(folder, user_id)
+    else:
+        markup = generate_folder_keyboard(folder, user_id)
+
+    # 📤 Safe message edit
+    try:
+        await callback_query.message.edit_text(text, reply_markup=markup)
+    except Exception as e:
+        await callback_query.answer(f"Error: {e}", show_alert=True)
+"""    
 @app.on_callback_query(filters.regex("^open:"))
 async def open_folder_handler(client, callback_query):
     user = callback_query.from_user
@@ -104,6 +115,8 @@ async def open_folder_handler(client, callback_query):
 
     markup = generate_folder_keyboard(folder, user_id)
     await callback_query.message.edit_text(text, reply_markup=markup)
+
+"""
 def generate_folder_keyboard(folder: dict, user_id: int):
     layout = defaultdict(dict)
     folder_id = folder.get("id", "unknown")
