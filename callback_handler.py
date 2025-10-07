@@ -72,7 +72,7 @@ async def open_folder_handler_for_group(client, callback_query):
     markup = generate_folder_keyboard_for_groups(folder, user_id)
     await callback_query.message.edit_text(text, reply_markup=markup)
     
-@app.on_callback_query(filters.regex("^open:") & filters.private)
+@app.on_callback_query(filters.regex("^open:"))
 async def open_folder_handler(client, callback_query):
     user = callback_query.from_user
     user_id = user.id
