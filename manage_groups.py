@@ -687,7 +687,7 @@ async def handle_new_content(client, message):
         group_wel[group_id] = group_data
         msg = await message.reply("Please Wait...")
         if not is_termux :
-           Truesave_group_settings_json_to_mongodb()
+           save_group_settings_json_to_mongodb()
         save_group_welcome(group_wel)
         back_button = InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data=f"back_to_group_menu_{group_id}")]
