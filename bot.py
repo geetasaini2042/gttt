@@ -3,6 +3,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo, User
 from script import app, run_flask, run_bot,is_user_subscribed_requests, upload_users,save_data_file_to_mongo, save_data_file1_to_mongo
 from common_data import data_file,data_file1, users_file, status_user_file, temp_folder_file,temp_url_file,temp_webapp_file,temp_file_json, DEFAULT_JSON,OWNER,ADMINS,REQUIRED_CHANNELS,send_startup_message_once,is_termux
+import manage_groups
 import vip_from_user, withdrawal, pdf_flask
 from pdf_anlysis import save_json_files_to_mongo
 from typing import Union
@@ -10,6 +11,12 @@ from collections import defaultdict
 from filters.status_filters import StatusFilter
 from uuid import uuid4
 
+def load_group_welcome():
+    if not os.path.exists(group_wel_file):
+        return {}
+    with open(group_wel_file, "r") as f:
+        return json.load(f)
+        
 @app.on_message(filters.command("update") & filters.private)
 def update_data_on_md(client, message):
     user_id = message.from_user.id
@@ -406,6 +413,8 @@ async def start_handler(client, message: Message):
 
             channel_links_text += f"🔗 {link}\n"
             buttons.append([InlineKeyboardButton("📢 Join Channel", url=link)])
+        bot_username = (await client.get_me()).username
+        buttons.append([InlineKeyboardButton("Add me to your group", url=f"https://t.me/{bot_username}?startgroup=true")])
 
         await message.reply_text(
             "Please Join Below Channels send /start again\n"
@@ -706,7 +715,7 @@ def clear_user_status(user_id):
         json.dump(statuses, f)
 
 
-
+import delete_group_url_msg
 import callback_handler,command
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask)

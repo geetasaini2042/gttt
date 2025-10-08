@@ -32,6 +32,7 @@ PDF_VIEWS_FILE = os.path.join(BASE_PATH, "PRE/PDF_VIEWS_FILE.json")
 pre_file = os.path.join(BASE_PATH, "pre_files_over.json")
 DELETED_PDF_FILE = os.path.join(BASE_PATH, "deleted_user_files.json")
 WITHDRAW_FILE = os.path.join(BASE_PATH, "user_withdrawal_details.json")
+GROUP_WEL_FILE = os.path.join(BASE_PATH, "GROUP_WEL.JSON")
 def ADMINS():
      try:
          with open(ADMINS_FILE, "r") as f:

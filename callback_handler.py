@@ -21,8 +21,84 @@ def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
         print(f"❌ Invalid JSON in file: {data_file}")
     except Exception as e:
         print(f"⚠ Unexpected error: {e}")
-    return None
+def is_group_chat(callback_query):
+    """सही तरीके से group/supergroup detection करता है (string आधारित)"""
+    try:
+        if callback_query.message and callback_query.message.chat:
+            chat = callback_query.message.chat
+            chat_type = str(chat.type).lower()
+            #print(f"\n📡 Chat Info: {chat}\nType: {chat_type}\n")
 
+            # group या supergroup दोनों को detect करो
+            if "group" in chat_type:
+                print("✅ Group detected")
+                return True
+    except Exception as e:
+        print(f"⚠️ is_group_chat error: {e}")
+        pass
+
+    return False
+@app.on_callback_query(filters.regex(r"^open:(.+)$"))
+async def open_folder_handler(client, callback_query):
+    user = callback_query.from_user
+    user_id = user.id
+    data_parts = callback_query.data.split(":")
+    folder_id = data_parts[1] if len(data_parts) > 1 else "root"
+    #print(callback_query)
+
+    # 🧩 Safe group detection
+    is_group = is_group_chat(callback_query)
+    #print(f"🧩 open: folder={folder_id}, from_user={user_id}, group={is_group}")
+
+    # अगर callback group में है और data में user_id पास नहीं किया गया
+    passed_user = int(data_parts[2]) if len(data_parts) > 2 else None
+    #print(f"🧩 open: folder={folder_id}, from_user={user_id}, passed_user={passed_user}, group={is_group}")
+
+    # Group check + user match
+    if is_group:
+        if passed_user is None:
+            await callback_query.answer("⚠️ Invalid access (missing user id).", show_alert=True)
+            return
+        if user_id != passed_user:
+            await callback_query.answer("⚠️ This button belongs to another student.\nPlease send /start to get your own menu.", show_alert=True)
+            return
+
+        # Redirect to bot chat
+        """
+        bot_username = (await client.get_me()).username
+        await callback_query.answer(url=f"https://t.me/{bot_username}?start=open_{folder_id}")
+        return
+        """
+
+    # ✅ अब private chat में actual folder दिखाओ
+    full_data = load_bot_data()
+    if not full_data:
+        await callback_query.message.edit_text("❌ Bot data not found.")
+        return
+
+    root_folder = full_data.get("data", {})
+    folder = find_folder_by_id(root_folder, folder_id)
+    if not folder:
+        await callback_query.answer("❌ Folder not found.", show_alert=True)
+        return
+
+    # 📖 Description placeholders
+    raw_text = folder.get("description", "Hello 👋👋📖")
+    text = raw_text\
+        .replace("${first_name}", user.first_name or "")\
+        .replace("${last_name}", user.last_name or "")\
+        .replace("${full_name}", f"{user.first_name or ''} {user.last_name or ''}".strip())\
+        .replace("${id}", str(user.id))\
+        .replace("${username}", user.username or "")\
+        .replace("${mention}", f"[{user.first_name}](tg://user?id={user.id})")\
+        .replace("${link}", f"tg://user?id={user.id}")
+    if is_group:
+       markup = generate_folder_keyboard_for_groups(folder, user_id)
+    else:
+       markup = generate_folder_keyboard(folder, user_id)
+    await callback_query.message.edit_text(text, reply_markup=markup)
+
+"""
 @app.on_callback_query(filters.regex("^open:"))
 async def open_folder_handler(client, callback_query):
     user = callback_query.from_user
@@ -31,6 +107,7 @@ async def open_folder_handler(client, callback_query):
     parts = callback_query.data.split(":")
     folder_id = parts[1] if len(parts) > 1 else None
     passed_user_id = int(parts[2]) if len(parts) > 2 else None  # केवल group के लिए उपयोग होगा
+    print("passed_user_id")
 
     chat = callback_query.message.chat
     is_group = chat.type in ["group", "supergroup"]
@@ -83,6 +160,7 @@ async def open_folder_handler(client, callback_query):
     except Exception as e:
         await callback_query.answer(f"Error: {e}", show_alert=True)
 """    
+"""
 @app.on_callback_query(filters.regex("^open:"))
 async def open_folder_handler(client, callback_query):
     user = callback_query.from_user
@@ -2291,9 +2369,9 @@ async def send_file_from_json(client, callback_query):
         file_uuid = data_parts[1]
         user_id = callback_query.from_user.id
         chat = callback_query.message.chat
-
         # 🧩 अगर callback group में आया है
-        if chat.type in ["group", "supergroup"]:
+        is_group = is_group_chat(callback_query)
+        if is_group:
             # ✅ Check करें कि callback_data में original user id मौजूद है
             if len(data_parts) < 3:
                 await callback_query.answer("❌ Invalid file request.", show_alert=True)
@@ -2303,7 +2381,7 @@ async def send_file_from_json(client, callback_query):
 
             # ✅ अगर किसी और user ने click किया
             if original_user_id != user_id:
-                await callback_query.answer("⚠️ यह फ़ाइल केवल उसी उपयोगकर्ता के लिए है जिसने इसे अनुरोध किया था।", show_alert=True)
+                await callback_query.answer("⚠️ This button belongs to another user.\nPlease send /start to get your own menu.", show_alert=True)
                 return
 
             # ✅ अब सही user को redirect करें private chat में
@@ -2546,7 +2624,7 @@ async def send_file_from_json(client, callback_query):
 
             # 💬 User-facing unlock message
             if premium_owner and int(user_id) == int(premium_owner):
-              unlock_msg = f"""**Hello Partner**,
+              unlock_msg = f"**Hello Partner**,
 You are Making Money by this file.
 
 **📁 Name:** `{name}`  
@@ -2554,9 +2632,9 @@ You are Making Money by this file.
 **📦 Size:** `{readable_size}`
 ** File uuid: `{file_uuid}`
 
-You can manage this file by command `/my_pdf {file_uuid}` """
+You can manage this file by command `/my_pdf {file_uuid}` "
             else:
-              unlock_msg = f"""🔐 **Exclusive Premium File**
+              unlock_msg = f"🔐 **Exclusive Premium File**
 
 **📁 Name:** `{name}`  
 **📝 Description:** `{caption}`  
@@ -2568,7 +2646,7 @@ This is a premium file with valuable content, available only to exclusive users.
 It helps us keep the content accessible for everyone. Thank you for your support! 🙏
 
 👇 Tap **Unlock Now** to continue.
-"""
+"
 
             buttons = [
                 [InlineKeyboardButton("🔓 Unlock this file", web_app=WebAppInfo(url=unlock_url))]
