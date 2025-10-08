@@ -4,7 +4,7 @@ from config import save_mongodb_data_to_file ,find_parent_of_parent,save_mongodb
 from pymongo import MongoClient
 from flask import Flask, request, jsonify,abort
 from bson import json_util
-from common_data import data_file,data_file1, API_ID, API_HASH,BOT_TOKEN, MD_URI, BASE_PATH,DEPLOY_URL,users_file, LIKED_FILE, DISLIKED_FILE, PDF_VIEWS_FILE, DELETED_PDF_FILE, pre_file,WITHDRAW_FILE
+from common_data import data_file,data_file1, API_ID, API_HASH,BOT_TOKEN, MD_URI, BASE_PATH,DEPLOY_URL,users_file, LIKED_FILE, DISLIKED_FILE, PDF_VIEWS_FILE, DELETED_PDF_FILE, pre_file,WITHDRAW_FILE, GROUP_WEL_FILE
 import requests 
 app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 import logging
@@ -18,6 +18,10 @@ flask_app = Flask(__name__)
 
 
 import fcntl
+# 🔹 Logging setup
+
+logger = logging.getLogger(__name__)
+
 
 def safe_read_json(filepath):
     with open(filepath, "r", encoding="utf-8") as f:
@@ -70,6 +74,111 @@ def get_json_file(filename):
         return jsonify(data)
     except Exception as e:
         return abort(500, f"Error reading file: {str(e)}")
+
+def save_group_settings_json_to_mongodb():
+    """
+    JSON फ़ाइल की पूरी content MongoDB में save करता है।
+    हर group ID को अलग document की तरह insert/update करेगा।
+
+    Args:
+        json_file_path (str): JSON फ़ाइल का path
+        MD_URI (str): MongoDB URI
+        collection_name (str): Collection का नाम (default: "group_settings")
+    """
+
+    # 🔹 JSON फाइल पढ़ना
+    json_file_path = GROUP_WEL_FILE
+    collection_name = "group_settings"
+    try:
+        with open(json_file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        logger.info("📁 JSON फ़ाइल सफलतापूर्वक पढ़ ली गई।")
+    except Exception as e:
+        logger.error(f"❌ JSON फ़ाइल पढ़ने में गलती: {e}")
+        return
+
+    # 🔹 MongoDB से कनेक्ट होना
+    try:
+        client = MongoClient(MD_URI)
+        db = client["bot_database"]
+        collection = db[collection_name]
+        logger.info("✅ MongoDB से सफलतापूर्वक कनेक्ट हो गया।")
+    except Exception as e:
+        logger.error(f"❌ MongoDB से कनेक्ट नहीं हो पाया: {e}")
+        return
+
+    # 🔹 Common info सेव करना
+    common_info = data.get("common_info", {})
+    if common_info:
+        collection.update_one(
+            {"_id": "common_info"},
+            {"$set": {"data": common_info}},
+            upsert=True
+        )
+        logger.info("ℹ️ Common info MongoDB में सेव कर दिया गया।")
+
+    # 🔹 बाकी groups सेव करना
+    for group_id, group_data in data.items():
+        if group_id == "common_info":
+            continue
+        try:
+            collection.update_one(
+                {"_id": group_id},
+                {"$set": group_data},
+                upsert=True
+            )
+            logger.info(f"✅ Group {group_id} का डेटा MongoDB में सेव किया गया।")
+        except Exception as e:
+            logger.warning(f"⚠️ Group {group_id} को सेव करते समय गलती: {e}")
+
+    client.close()
+    logger.info("🎯 सभी डेटा सफलतापूर्वक MongoDB में सेव हो गए।")
+
+
+def export_group_settings_mongodb_to_json():
+    """
+    MongoDB collection से सभी data पढ़कर JSON फाइल में save करता है।
+
+    Args:
+        MD_URI (str): MongoDB URI
+        json_file_path (str): Output JSON file path
+        collection_name (str): Collection का नाम (default: "group_settings")
+    """
+
+    # 🔹 MongoDB से connect
+    json_file_path = GROUP_WEL_FILE
+    collection_name = "group_settings"
+    try:
+        client = MongoClient(MD_URI)
+        db = client["bot_database"]
+        collection = db[collection_name]
+        logger.info("✅ MongoDB से सफलतापूर्वक कनेक्ट हो गया।")
+    except Exception as e:
+        logger.error(f"❌ MongoDB से कनेक्ट नहीं हो पाया: {e}")
+        return
+
+    # 🔹 सभी documents पढ़ना
+    try:
+        data = {}
+        for doc in collection.find({}):
+            _id = doc.get("_id")
+            doc_copy = doc.copy()
+            doc_copy.pop("_id", None)  # Remove MongoDB _id
+            data[_id] = doc_copy
+        logger.info(f"📁 {len(data)} documents MongoDB से पढ़ लिए गए।")
+    except Exception as e:
+        logger.error(f"❌ MongoDB से data पढ़ने में गलती: {e}")
+        return
+    finally:
+        client.close()
+
+    # 🔹 JSON फाइल में save करना
+    try:
+        with open(json_file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        logger.info(f"🎯 सभी डेटा JSON फाइल '{json_file_path}' में सफलतापूर्वक save हो गए।")
+    except Exception as e:
+        logger.error(f"❌ JSON फाइल में save करते समय गलती: {e}")
 @flask_app.route("/upload-users", methods=["POST"])
 def upload_users():
     try:
@@ -399,12 +508,14 @@ def run_bot():
         download_from_mongodb()
         load_json1_files_from_mongo()
         save_withdrawals_to_file()
+        export_group_settings_mongodb_to_json()
     app.run()
     if not is_termux:
       requests.post(DEPLOY_URL)
       upload_users()
       upload_json_to_mongodb()
       save_json_files_to_mongo()
+      save_group_settings_json_to_mongodb
     logging.info("Stopped\n")
 def get_created_by_from_folder(folder_id):
     try:
