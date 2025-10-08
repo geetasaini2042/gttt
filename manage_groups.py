@@ -245,30 +245,45 @@ async def handle_left_member(client, message: Message):
         disable_web_page_preview=True
     )
 
+from pyrogram import filters
+from pyrogram.errors import ChatAdminRequired, UserNotParticipant
+
 @app.on_callback_query(filters.regex(r"^group_settings$"))
 async def group_settings_handler(client, callback_query):
     user = callback_query.from_user
     chat = callback_query.message.chat
     group_id = chat.id
-    is_group = is_group_chat(callback_query)
-    # 🔹 Check if the callback is in a group/supergroup
-    if not is_group:
-        await callback_query.answer("❌ This button works only in groups.", show_alert=True)
+
+    # 🔹 Ensure the callback comes from a group or supergroup
+    if chat.type not in ["group", "supergroup"]:
+        await callback_query.answer("❌ This button only works in groups.", show_alert=True)
+        return
+
+    # 🔹 Check if the bot is admin (always check this first)
+    try:
+        bot_member = await client.get_chat_member(group_id, client.me.id)
+        if not bot_member.privileges or not bot_member.privileges.can_manage_chat:
+            await callback_query.answer("⚠️ Please promote me to admin so I can open the group settings.", show_alert=True)
+            return
+    except ChatAdminRequired:
+        await callback_query.answer("⚠️ I don’t have admin access in this group.", show_alert=True)
         return
 
     # 🔹 Check if the user is an admin
-    user_member = await client.get_chat_member(group_id, user.id)
-    if not user_member.privileges or not user_member.privileges.can_manage_chat:
-        await callback_query.answer("❌ You must be an admin to access group settings.", show_alert=True)
+    try:
+        user_member = await client.get_chat_member(group_id, user.id)
+        if not user_member.privileges or not user_member.privileges.can_manage_chat:
+            await callback_query.answer("❌ Only group admins can access settings.", show_alert=True)
+            return
+    except UserNotParticipant:
+        await callback_query.answer("❌ You are not a member of this group.", show_alert=True)
+        return
+    except ChatAdminRequired:
+        # Shouldn't normally happen, but handled just in case
+        await callback_query.answer("⚠️ I don’t have permission to view member details.", show_alert=True)
         return
 
-    # 🔹 Check if bot is an admin
-    bot_member = await client.get_chat_member(group_id, client.me.id)
-    if not bot_member.privileges or not bot_member.privileges.can_manage_chat:
-        await callback_query.answer("❌ I need admin privileges to open group settings.", show_alert=True)
-        return
-
-    # 🔹 All checks passed → provide the settings link
+    # 🔹 All checks passed → open settings link
     g_settings = f"https://t.me/{(await client.get_me()).username}?start=group_settings_{group_id}"
     await callback_query.answer(url=g_settings)
     
