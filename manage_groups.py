@@ -255,7 +255,7 @@ async def group_settings_handler(client, callback_query):
     group_id = chat.id
 
     # 🔹 Ensure the callback comes from a group or supergroup
-    if chat.type not in ["group", "supergroup"]:
+    if not is_group_chat:
         await callback_query.answer("❌ This button only works in groups.", show_alert=True)
         return
 
