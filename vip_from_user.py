@@ -441,7 +441,8 @@ async def send_file_from_json(client, message, file_uuid):
                 file_size = sent_msg.audio.file_size
             readable_size = f"{round(file_size / (1024 * 1024), 2)} MB" if file_size else "Unknown"
 
-            base_unlock = "https://geetasaini2042.github.io/Ru/Premium/unlock.html?"
+           # base_unlock = "https://geetasaini2042.github.io/Ru/Premium/unlock.html?"
+            base_unlock = "https://reward.edumate.life/Premium/unlock.html?"
             if premium_owner:
                 unlock_base_url = DEPLOY_URL.rstrip("/") + f"/unlock_users_file"
 
