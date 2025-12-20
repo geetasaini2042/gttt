@@ -54,12 +54,18 @@ STARTUP_MESSAGE = "🤖 Bot is now online! (via raw API)"
 # Channel IDs from environment or hardcoded fallback
 CHANNEL_IDS = [PREMIUM_CHECK_LOG, FILE_LOGS, REQUIRED_CHANNELS]
 
+import asyncio
+import os
+import requests
+
 async def send_startup_message_once():
     if os.path.exists(FLAG_FILE):
         print("✅ Startup message already sent before.")
         return
 
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    # URLs for sending and deleting
+    send_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    delete_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
 
     for chat_id in CHANNEL_IDS:
         payload = {
@@ -68,18 +74,36 @@ async def send_startup_message_once():
         }
 
         try:
-            response = requests.post(url, data=payload)
+            # 1. Message Bhejna (Send)
+            response = requests.post(send_url, data=payload)
             result = response.json()
+
             if result.get("ok"):
-                print(f"✅ Message sent to {chat_id}")
+                # Response se Message ID nikalna
+                message_id = result["result"]["message_id"]
+                print(f"✅ Message sent to {chat_id} (ID: {message_id})")
+
+                # 2. 4 Second ka Intezaar (Wait)
+                await asyncio.sleep(4) 
+
+                # 3. Message Delete karna
+                delete_payload = {
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                }
+                requests.post(delete_url, data=delete_payload)
+                print(f"🗑️ Message deleted for {chat_id}")
+
             else:
-                print(f"❌ Failed for {chat_id}: {result}")
+                print(f"❌ Failed to send to {chat_id}: {result}")
+
         except Exception as e:
             print(f"❌ Exception for {chat_id}: {e}")
 
-    # Mark as done so it doesn't repeat
+    # Mark as done
     with open(FLAG_FILE, "w") as f:
         f.write("done")
+
 DEFAULT_JSON = {
     "data": {
         "id": "root",
