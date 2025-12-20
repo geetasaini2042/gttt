@@ -38,7 +38,9 @@ tokens = [
     {
         "1": "YzJ0ZlpYcEVRazlSTlV4RGJFZHNUa2h4WTNWeFZXRkRTVWN5T0RsR01GazNWMVE9",
         "ap": "YUhSMGNITTZMeTluWlc0dWNHOXNiR2x1WVhScGIyNXpMbUZwTDNZeEwyTm9ZWFF2WTI5dGNHeGxkR2x2Ym5NPQ=="
-    }
+    },
+    {        "2": "YzJ0ZlVHMUhjMnRvTkVadVNFOUdkR3htTVZoVFpubzBWMjl3TVdWVWNuSmtWa2s9",
+             "ap": "YUhSMGNITTZMeTluWlc0dWNHOXNiR2x1WVhScGIyNXpMbUZwTDNZeEwyTm9ZWFF2WTI5dGNHeGxkR2x2Ym5NPQ=="}
 ]
 
 CHAT_HISTODY_FILE = os.path.join(BASE_PATH, "chat_history.json")
