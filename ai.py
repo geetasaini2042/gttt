@@ -217,7 +217,7 @@ async def ai_reply(client, message):
                 continue 
 
         if reply:
-            await message.reply_text(reply)
+            await message.reply_text(reply, disable_web_page_preview=True)
 
     except Exception:
         pass
