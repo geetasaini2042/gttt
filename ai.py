@@ -7,15 +7,15 @@ import aiohttp
 import aiofiles
 from pyrogram import filters, enums
 from script import app
-from common_data import tokens, CHAT_HISTODY_FILE
+from common_data import tokens, CHAT_HISTODY_FILE, SYSTEM_MSG_FILE
 
 # ---------------- CONFIGURATION ----------------
 MAX_HISTORY_LENGTH = 20
 TIMEOUT_SECONDS = 30
-SYSTEM_MSG_FILE = "CHAT_SYSTEM_MSG"
-
-# Default fallback prompt (agar URL down ho aur file na mile)
 DEFAULT_PROMPT = "You are a helpful AI assistant."
+
+# Global Flag to check if prompt is loaded
+SYSTEM_PROMPT_LOADED = False 
 
 # ---------------- TOKEN MANAGER ----------------
 class TokenManager:
@@ -47,35 +47,42 @@ class TokenManager:
 
 token_manager = TokenManager(tokens)
 
-# ---------------- SYSTEM PROMPT MANAGEMENT ----------------
-async def fetch_and_save_system_prompt(bot_username):
-    """URL se prompt fetch karke file mein save karega"""
-    url = f"https://www.singodiya.tech/AI-SYSTEM/@{bot_username}.json"
-    
+# ---------------- HELPER FUNCTIONS ----------------
+async def fetch_system_prompt_from_url(client):
+    """
+    Sirf tab chalega jab SYSTEM_PROMPT_LOADED = False hoga.
+    """
     try:
+        me = await client.get_me()
+        bot_username = me.username
+        url = f"https://www.singodiya.tech/AI-SYSTEM/@{bot_username}.json"
+        
+        print(f"🔄 Updating System Prompt from: {url}")
+
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=10) as response:
                 if response.status == 200:
                     data = await response.json()
-                    # Maan lete hain JSON ek list hai ["You are..."]
+                    # Data list hai ya string, handle karo
                     if isinstance(data, list) and len(data) > 0:
                         prompt_text = data[0]
                     else:
                         prompt_text = str(data)
 
-                    # File mein save karein
+                    # File me save karo
                     async with aiofiles.open(SYSTEM_MSG_FILE, "w", encoding="utf-8") as f:
                         await f.write(prompt_text)
-                    print(f"System Prompt Updated from {url}")
+                    print("✅ System Prompt Updated Successfully.")
                 else:
-                    print(f"Failed to fetch prompt. Status: {response.status}")
+                    print(f"⚠️ Failed to update prompt. Status: {response.status}")
     except Exception as e:
-        print(f"Error updating system prompt: {e}")
+        print(f"❌ Error fetching prompt: {e}")
 
 async def get_formatted_system_prompt(client, message):
-    """File se prompt padh kar dynamic values replace karega"""
-    # 1. File se prompt load karo
+    """File padh ke variables replace karega"""
     prompt_text = DEFAULT_PROMPT
+    
+    # File read karo
     if os.path.exists(SYSTEM_MSG_FILE):
         try:
             async with aiofiles.open(SYSTEM_MSG_FILE, "r", encoding="utf-8") as f:
@@ -83,44 +90,30 @@ async def get_formatted_system_prompt(client, message):
         except:
             pass
     
-    # 2. User aur Bot ki details nikalo
+    # Dynamic Replacement logic
     user = message.from_user
-    bot = await client.get_me()
+    me = await client.get_me()
     
-    first_name = user.first_name if user.first_name else "User"
-    user_username = f"@{user.username}" if user.username else "No Username"
-    user_id = str(user.id)
-    
-    bot_name = bot.first_name
-    bot_username = f"@{bot.username}"
-
-    # 3. Replacements (Dynamic Values)
-    # Syntax: ₹{variable_name}
     replacements = {
-        "₹{first_name}": first_name,
-        "₹{user_username}": user_username,
-        "₹{user_id}": user_id,
-        "₹{bot_name}": bot_name,
-        "₹{bot_username}": bot_username
+        "₹{first_name}": user.first_name or "User",
+        "₹{user_username}": f"@{user.username}" if user.username else "No Username",
+        "₹{user_id}": str(user.id),
+        "₹{bot_name}": me.first_name,
+        "₹{bot_username}": f"@{me.username}"
     }
     
-    final_prompt = prompt_text
-    for key, value in replacements.items():
-        final_prompt = final_prompt.replace(key, value)
+    for k, v in replacements.items():
+        prompt_text = prompt_text.replace(k, v)
         
-    return final_prompt
+    return prompt_text
 
-# ---------------- ASYNC CHAT HISTORY ----------------
 async def load_history(user_id: int) -> list:
-    if not os.path.exists(CHAT_HISTODY_FILE):
-        return []
+    if not os.path.exists(CHAT_HISTODY_FILE): return []
     try:
         async with aiofiles.open(CHAT_HISTODY_FILE, "r", encoding="utf-8") as f:
             content = await f.read()
-            data = json.loads(content) if content else {}
-            return data.get(str(user_id), [])
-    except Exception:
-        return []
+            return json.loads(content).get(str(user_id), []) if content else []
+    except: return []
 
 async def save_history(user_id: int, history: list):
     try:
@@ -128,104 +121,71 @@ async def save_history(user_id: int, history: list):
             async with aiofiles.open(CHAT_HISTODY_FILE, "r", encoding="utf-8") as f:
                 content = await f.read()
                 data = json.loads(content) if content else {}
-        else:
-            data = {}
-
+        else: data = {}
+        
         data[str(user_id)] = history[-MAX_HISTORY_LENGTH:]
-
         async with aiofiles.open(CHAT_HISTODY_FILE, "w", encoding="utf-8") as f:
             await f.write(json.dumps(data, ensure_ascii=False, indent=2))
-    except Exception:
-        pass
+    except: pass
 
-# ---------------- AI ENGINE (SILENT) ----------------
-async def ask_ai(client, message) -> str | None:
-    user_id = message.from_user.id
-    user_text = message.text
-    
-    # Dynamic System Prompt Generate karo
-    system_prompt = await get_formatted_system_prompt(client, message)
-    
-    history = await load_history(user_id)
-
-    messages = [{"role": "system", "content": system_prompt}]
-    messages.extend(history)
-    messages.append({"role": "user", "content": user_text})
-
-    for attempt in range(3):
-        api_key, api_url = await token_manager.get_next_credentials()
-
-        if not api_key or not api_url:
-            continue
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "model": "nova-micro",
-            "messages": messages
-        }
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    api_url, 
-                    json=payload, 
-                    headers=headers, 
-                    timeout=TIMEOUT_SECONDS
-                ) as response:
-                    
-                    if response.status == 200:
-                        data = await response.json()
-                        reply = data["choices"][0]["message"]["content"]
-                        
-                        history.append({"role": "user", "content": user_text})
-                        history.append({"role": "assistant", "content": reply})
-                        await save_history(user_id, history)
-                        
-                        return reply
-                    
-                    elif response.status in [401, 403]:
-                        print(f"Token failed (Attempt {attempt+1}), rotating...")
-                        continue 
-                    
-                    else:
-                        return None
-
-        except Exception as e:
-            print(f"Connection error: {e}")
-            continue
-
-    return None
-
-# ---------------- STARTUP HOOK ----------------
-# Bot start hone par ye function chalega
-@app.on_start
-async def on_bot_start(client):
-    me = await client.get_me()
-    print(f"Bot Started: {me.username}")
-    # System prompt URL se fetch karo
-    await fetch_and_save_system_prompt(me.username)
-
-
-# ---------------- MESSAGE HANDLER ----------------
+# ---------------- CORE LOGIC ----------------
 @app.on_message(filters.text & ~filters.command("start"))
 async def ai_reply(client, message):
-    user_id = message.from_user.id
+    global SYSTEM_PROMPT_LOADED  # Global variable use kar rahe hain
     
+    # 1. Check kro: Kya system prompt load ho chuka hai?
+    if not SYSTEM_PROMPT_LOADED:
+        await fetch_system_prompt_from_url(client)
+        SYSTEM_PROMPT_LOADED = True  # Ab true set kardo taaki bar-bar na chale
+    
+    # 2. Typing action bhejo
     try:
         await client.send_chat_action(chat_id=message.chat.id, action=enums.ChatAction.TYPING)
     except:
         pass
 
+    # 3. AI Logic
     try:
-        # Note: Ab hum 'client' aur 'message' dono pass kar rahe hain ask_ai ko
-        reply = await ask_ai(client, message)
-        
+        user_id = message.from_user.id
+        # Prompt formatted way me nikalo
+        system_prompt = await get_formatted_system_prompt(client, message)
+        history = await load_history(user_id)
+
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(history)
+        messages.append({"role": "user", "content": message.text})
+
+        # Token & Request Loop
+        reply = None
+        for attempt in range(3):
+            api_key, api_url = await token_manager.get_next_credentials()
+            if not api_key: continue
+            
+            try:
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                payload = {"model": "nova-micro", "messages": messages}
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(api_url, json=payload, headers=headers, timeout=TIMEOUT_SECONDS) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            reply = data["choices"][0]["message"]["content"]
+                            
+                            # Success -> Save History & Break Loop
+                            history.append({"role": "user", "content": message.text})
+                            history.append({"role": "assistant", "content": reply})
+                            await save_history(user_id, history)
+                            break
+                        elif resp.status in [401, 403]:
+                            continue # Try next token
+                        else:
+                            break # Server error, stop trying
+            except:
+                continue # Network error, try next
+
+        # 4. Send Reply (Only if successful)
         if reply:
             await message.reply_text(reply, quote=True)
-            
-    except Exception:
-        pass
+
+    except Exception as e:
+        print(f"Error in handler: {e}")
