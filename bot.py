@@ -717,6 +717,7 @@ def clear_user_status(user_id):
 
 import delete_group_url_msg
 import callback_handler,command
+import ai
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
