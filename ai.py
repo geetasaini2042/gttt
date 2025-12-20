@@ -12,10 +12,10 @@ from common_data import tokens, CHAT_HISTODY_FILE
 # ---------------- CONFIGURATION ----------------
 MAX_HISTORY_LENGTH = 20
 TIMEOUT_SECONDS = 30
-SYSTEM_PROMPT = (
-    "You are GNIKNAP AI, an education-focused assistant developed by SingodiyaTech. "
-    "Help students only and follow all education rules strictly."
-)
+SYSTEM_MSG_FILE = "CHAT_SYSTEM_MSG"
+
+# Default fallback prompt (agar URL down ho aur file na mile)
+DEFAULT_PROMPT = "You are a helpful AI assistant."
 
 # ---------------- TOKEN MANAGER ----------------
 class TokenManager:
@@ -47,6 +47,69 @@ class TokenManager:
 
 token_manager = TokenManager(tokens)
 
+# ---------------- SYSTEM PROMPT MANAGEMENT ----------------
+async def fetch_and_save_system_prompt(bot_username):
+    """URL se prompt fetch karke file mein save karega"""
+    url = f"https://www.singodiya.tech/AI-SYSTEM/@{bot_username}.json"
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # Maan lete hain JSON ek list hai ["You are..."]
+                    if isinstance(data, list) and len(data) > 0:
+                        prompt_text = data[0]
+                    else:
+                        prompt_text = str(data)
+
+                    # File mein save karein
+                    async with aiofiles.open(SYSTEM_MSG_FILE, "w", encoding="utf-8") as f:
+                        await f.write(prompt_text)
+                    print(f"System Prompt Updated from {url}")
+                else:
+                    print(f"Failed to fetch prompt. Status: {response.status}")
+    except Exception as e:
+        print(f"Error updating system prompt: {e}")
+
+async def get_formatted_system_prompt(client, message):
+    """File se prompt padh kar dynamic values replace karega"""
+    # 1. File se prompt load karo
+    prompt_text = DEFAULT_PROMPT
+    if os.path.exists(SYSTEM_MSG_FILE):
+        try:
+            async with aiofiles.open(SYSTEM_MSG_FILE, "r", encoding="utf-8") as f:
+                prompt_text = await f.read()
+        except:
+            pass
+    
+    # 2. User aur Bot ki details nikalo
+    user = message.from_user
+    bot = await client.get_me()
+    
+    first_name = user.first_name if user.first_name else "User"
+    user_username = f"@{user.username}" if user.username else "No Username"
+    user_id = str(user.id)
+    
+    bot_name = bot.first_name
+    bot_username = f"@{bot.username}"
+
+    # 3. Replacements (Dynamic Values)
+    # Syntax: ₹{variable_name}
+    replacements = {
+        "₹{first_name}": first_name,
+        "₹{user_username}": user_username,
+        "₹{user_id}": user_id,
+        "₹{bot_name}": bot_name,
+        "₹{bot_username}": bot_username
+    }
+    
+    final_prompt = prompt_text
+    for key, value in replacements.items():
+        final_prompt = final_prompt.replace(key, value)
+        
+    return final_prompt
+
 # ---------------- ASYNC CHAT HISTORY ----------------
 async def load_history(user_id: int) -> list:
     if not os.path.exists(CHAT_HISTODY_FILE):
@@ -73,18 +136,22 @@ async def save_history(user_id: int, history: list):
         async with aiofiles.open(CHAT_HISTODY_FILE, "w", encoding="utf-8") as f:
             await f.write(json.dumps(data, ensure_ascii=False, indent=2))
     except Exception:
-        pass  # Silent fail on file save error
+        pass
 
-# ---------------- AI ENGINE (SILENT ON ERROR) ----------------
-async def ask_ai(user_id: int, user_text: str) -> str | None:
-    """Returns the AI reply string on success, or None on ANY failure."""
+# ---------------- AI ENGINE (SILENT) ----------------
+async def ask_ai(client, message) -> str | None:
+    user_id = message.from_user.id
+    user_text = message.text
+    
+    # Dynamic System Prompt Generate karo
+    system_prompt = await get_formatted_system_prompt(client, message)
+    
     history = await load_history(user_id)
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": system_prompt}]
     messages.extend(history)
     messages.append({"role": "user", "content": user_text})
 
-    # Try up to 3 different tokens
     for attempt in range(3):
         api_key, api_url = await token_manager.get_next_credentials()
 
@@ -114,7 +181,6 @@ async def ask_ai(user_id: int, user_text: str) -> str | None:
                         data = await response.json()
                         reply = data["choices"][0]["message"]["content"]
                         
-                        # Save history only on success
                         history.append({"role": "user", "content": user_text})
                         history.append({"role": "assistant", "content": reply})
                         await save_history(user_id, history)
@@ -122,44 +188,44 @@ async def ask_ai(user_id: int, user_text: str) -> str | None:
                         return reply
                     
                     elif response.status in [401, 403]:
-                        # Token invalid, try next one silently
                         print(f"Token failed (Attempt {attempt+1}), rotating...")
                         continue 
                     
                     else:
-                        # Any other server error -> Give up silently
                         return None
 
         except Exception as e:
-            # Network/Timeout error -> Try next token or Give up silently
             print(f"Connection error: {e}")
             continue
 
-    # If all 3 attempts fail
     return None
 
-# ---------------- PYROGRAM HANDLER ----------------
+# ---------------- STARTUP HOOK ----------------
+# Bot start hone par ye function chalega
+@app.on_start
+async def on_bot_start(client):
+    me = await client.get_me()
+    print(f"Bot Started: {me.username}")
+    # System prompt URL se fetch karo
+    await fetch_and_save_system_prompt(me.username)
+
+
+# ---------------- MESSAGE HANDLER ----------------
 @app.on_message(filters.text & ~filters.command("start"))
 async def ai_reply(client, message):
     user_id = message.from_user.id
     
-    # Optional: Send Typing action (User ko lagega bot active hai)
     try:
         await client.send_chat_action(chat_id=message.chat.id, action=enums.ChatAction.TYPING)
     except:
         pass
 
     try:
-        # AI se response mango
-        reply = await ask_ai(user_id, message.text)
+        # Note: Ab hum 'client' aur 'message' dono pass kar rahe hain ask_ai ko
+        reply = await ask_ai(client, message)
         
-        # SIRF tab reply karo jab response valid ho (Not None)
         if reply:
             await message.reply_text(reply, quote=True)
-        else:
-            # Agar None aaya, toh kuch mat karo (Silent)
-            pass 
             
     except Exception:
-        # Agar yaha bhi koi crash ho, toh bhi silent raho
         pass
