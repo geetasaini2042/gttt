@@ -383,7 +383,39 @@ async def start_handler(client, message: Message):
         await message.reply_text(welcome_text, reply_markup=markup)
     except:
         await message.reply_text(welcome_text)
-        
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+# 1. Message Text
+# Yahan humne "Powered by" section add kiya hai taaki user samjhe ki main system BotixHubBot hai.
+create_text = (
+    "**⚡ Powered by @BotixHubBot**\n"
+    "This bot is built and hosted on the **BotixHub** infrastructure. "
+    "We provide the technology that keeps this bot running smoothly.\n\n"
+    "**🌟 Why BotixHub?**\n"
+    "• High-Speed Cloud Servers 🚀\n"
+    "• 99.9% Uptime Guarantee 🟢\n"
+    "• Advanced Security Layers 🛡️\n\n"
+    "**Want to create a bot like this? Click below!** 👇"
+)
+
+# 2. Reply Markup
+create_markup = InlineKeyboardMarkup(
+    [
+        [
+            InlineKeyboardButton(
+                text="🚀 Create Your Own Bot",
+                url="https://t.me/BotixHubBot"
+            )
+        ],
+        [
+            InlineKeyboardButton(text="📢 Official Channel", url="https://t.me/BotixHubBot"),
+        ]
+    ]
+)
+
+# 3. Send Message
+
+
 @app.on_message(filters.command("start") & filters.regex(r"^/start$") & filters.private)
 async def start_handler(client, message: Message):
     user = message.from_user
@@ -422,6 +454,8 @@ async def start_handler(client, message: Message):
             f"{channel_links_text}",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
+        await message.reply_text(text=create_text,reply_markup=create_markup, disable_web_page_preview=True)
+
         return
     try :
        with open(data_file, "r") as f:
@@ -451,6 +485,8 @@ async def start_handler(client, message: Message):
         await message.reply_text(welcome_text, reply_markup=markup)
     except:
         await message.reply_text(welcome_text)
+    await message.reply_text(text=create_text,reply_markup=create_markup, disable_web_page_preview=True)
+
 @app.on_message(filters.private & filters.command("restart"))
 async def handle_restart(client, message):
     user_id = str(message.from_user.id)
