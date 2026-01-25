@@ -383,7 +383,7 @@ async def start_handler(client, message: Message):
         await message.reply_text(welcome_text, reply_markup=markup)
     except:
         await message.reply_text(welcome_text)
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+#from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # 1. Message Text
 # Yahan humne "Powered by" section add kiya hai taaki user samjhe ki main system BotixHubBot hai.
@@ -393,7 +393,7 @@ create_text = (
     "We provide the technology that keeps this bot running smoothly.\n\n"
     "**🌟 Why BotixHub?**\n"
     "• High-Speed Cloud Servers 🚀\n"
-    "• 99.9% Uptime Guarantee 🟢\n"
+    "• 99.9% Uptime Guarantee\n"
     "• Advanced Security Layers 🛡️\n\n"
     "**Want to create a bot like this? Click below!** 👇"
 )
@@ -406,9 +406,6 @@ create_markup = InlineKeyboardMarkup(
                 text="🚀 Create Your Own Bot",
                 url="https://t.me/BotixHubBot"
             )
-        ],
-        [
-            InlineKeyboardButton(text="📢 Official Channel", url="https://t.me/BotixHubBot"),
         ]
     ]
 )
