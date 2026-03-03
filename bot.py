@@ -10,12 +10,90 @@ from typing import Union
 from collections import defaultdict
 from filters.status_filters import StatusFilter
 from uuid import uuid4
-
+from config import upload_json_to_mongodb
 def load_group_welcome():
     if not os.path.exists(group_wel_file):
         return {}
     with open(group_wel_file, "r") as f:
         return json.load(f)
+
+
+@app.on_message(filters.command("block") & filters.private)
+def update_data_on_md(client, message):
+    user_id = message.from_user.id
+    if user_id not in ADMINS():
+        return
+
+    if len(message.command) < 2:
+        return message.reply_text("Usage: /block <user_id>")
+
+    try:
+        target_id = int(message.command[1])
+        file_path = "blocked_users.json"
+
+        # Load existing data
+        if os.path.exists(file_path):
+            with open(file_path, "r") as f:
+                try:
+                    data = json.load(f)
+                except:
+                    data = []
+        else:
+            data = []
+
+        # Add ID if not present
+        if target_id not in data:
+            data.append(target_id)
+            with open(file_path, "w") as f:
+                json.dump(data, f)
+            
+            # Call your function
+            upload_json_to_mongodb()
+            
+            message.reply_text(f"User {target_id} blocked and synced to DB.")
+        else:
+            message.reply_text("User already in block list.")
+
+    except ValueError:
+        message.reply_text("Invalid User ID.")
+    except Exception as e:
+        message.reply_text(f"Error: {e}")
+
+@app.on_message(filters.command("unblock") & filters.private)
+def unblock_user_on_md(client, message):
+    user_id = message.from_user.id
+    if user_id not in ADMINS():
+        return
+
+    if len(message.command) < 2:
+        return message.reply_text("Usage: /unblock <user_id>")
+
+    try:
+        target_id = int(message.command[1])
+        file_path = "blocked_users.json"
+
+        if os.path.exists(file_path):
+            with open(file_path, "r") as f:
+                data = json.load(f)
+            
+            if target_id in data:
+                data.remove(target_id)
+                with open(file_path, "w") as f:
+                    json.dump(data, f)
+                
+                # Sync to MongoDB
+                upload_json_to_mongodb()
+                
+                message.reply_text(f"User {target_id} unblocked and synced to DB.")
+            else:
+                message.reply_text("User not found in block list.")
+        else:
+            message.reply_text("Block list is empty.")
+
+    except ValueError:
+        message.reply_text("Invalid User ID.")
+    except Exception as e:
+        message.reply_text(f"Error: {e}")
         
 @app.on_message(filters.command("update") & filters.private)
 def update_data_on_md(client, message):
