@@ -19,7 +19,7 @@ def load_group_welcome():
 
 
 @app.on_message(filters.command("block") & filters.private)
-def update_data_on_md(client, message):
+def update_data_on_bl(client, message):
     user_id = message.from_user.id
     if user_id not in ADMINS():
         return
