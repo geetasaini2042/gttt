@@ -416,8 +416,84 @@ async def receive_folder_name(client, message):
     with open(status_user_file, "w") as f:
         json.dump(status_data, f)
 
-    await message.reply(f"✅ नाम सेव हो गया: {text}\nअब नया folder का विवरण (description) भेजें।")
+    await message.reply(
+    f"✨ **Folder Name Saved:** `{text}`\n\n"
+    "Now, please send a **description** for your new folder. "
+    "You can use Markdown or HTML for formatting if needed."
+)
 
+@app.on_message(filters.private & filters.text & StatusFilter("getting_folder_description"))
+async def receive_folder_description(client, message):
+    user_id = message.from_user.id
+    
+    # ✨ Process description formatting
+    description = message.text.markdown if message.entities else escape_markdown(message.text)
+
+    # 🔄 Load status data
+    try:
+        with open(status_user_file, "r") as f:
+            status_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        status_data = {}
+
+    status_val = status_data.get(str(user_id), "")
+    parent_id = status_val.split(":", 1)[1] if ":" in status_val else "root"
+
+    # 📁 Update temporary folder data
+    try:
+        with open(temp_folder_file, "r") as f:
+            temp_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        temp_data = {}
+
+    folder_data = temp_data.get(str(user_id), {})
+    folder_data["description"] = description
+    temp_data[str(user_id)] = folder_data
+
+    with open(temp_folder_file, "w") as f:
+        json.dump(temp_data, f, indent=2)
+
+    # 🛡️ Access Control: Only ADMINS get full permission toggles
+    is_admin = user_id in ADMINS()
+
+    if is_admin:
+        # Update status to allow permission toggling
+        status_data[str(user_id)] = f"setting_folder_permissions:{parent_id}"
+        with open(status_user_file, "w") as f:
+            json.dump(status_data, f)
+
+        # Full Control Buttons for Admins
+        buttons = [
+            [
+                InlineKeyboardButton("➕ Add File ❌", callback_data="toggle:add_file"),
+                InlineKeyboardButton("📁 Add Folder ❌", callback_data="toggle:add_folder")
+            ],
+            [
+                InlineKeyboardButton("🔗 Add URL ❌", callback_data="toggle:add_url"),
+                InlineKeyboardButton("🧩 Add WebApp ❌", callback_data="toggle:add_webapp")
+            ],
+            [InlineKeyboardButton("✅ Confirm & Save Folder", callback_data="confirm_folder")]
+        ]
+        response_text = (
+            "✅ **Description Saved!**\n\n"
+            "As an **Administrator**, you can now configure the folder permissions below. "
+            "Toggle the features you want to allow for this folder:"
+        )
+    else:
+        # Standard Button for regular users
+        buttons = [[InlineKeyboardButton("🚀 Confirm & Create Folder", callback_data="confirm_folder")]]
+        response_text = (
+            "✅ **Description Saved!**\n\n"
+            "Your folder details have been processed. Please click the button below to "
+            "finalize and create your folder."
+        )
+
+    await message.reply(
+        response_text,
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+"""
 @app.on_message(filters.private & filters.text & StatusFilter("getting_folder_description"))
 async def receive_folder_description(client, message):
     user_id = message.from_user.id
@@ -463,6 +539,7 @@ async def receive_folder_description(client, message):
         "📄 विवरण सेव हो गया!\nअब आप नीचे से जो सुविधाएँ allow करनी हैं उन्हें ✅ पर टॉगल करें:",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
+"""
 @app.on_callback_query(filters.regex("^toggle:"))
 async def toggle_permission_handler(client, callback_query):
     user_id = str(callback_query.from_user.id)
