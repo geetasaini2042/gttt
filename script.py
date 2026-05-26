@@ -436,8 +436,8 @@ HTML_TEMPLATE = '''
     <input type="submit" value="Save Changes">
 </form>
 '''
-
-@flask_app.route('/edit-data/<filename>', methods=['GET', 'POST'])
+#flask_app.route("/get-file/<path:filename>")
+@flask_app.route('/edit-data/<path:filename>', methods=['GET', 'POST'])
 def edit_data(filename):
     filepath = os.path.join(BASE_PATH, filename)
 
