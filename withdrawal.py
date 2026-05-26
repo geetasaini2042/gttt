@@ -2,9 +2,8 @@ import os, json, datetime
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram import filters
 from pdf_anlysis import calculate_user_earnings, get_total_withdrawn
-from common_data import BASE_PATH
-WITHDRAW_FILE = os.path.join(BASE_PATH, "user_withdrawal_details.json")
-ADMINS_FILE = os.path.join(BASE_PATH, "admins.json")
+from common_data import BASE_PATH, WITHDRAW_FILE, ADMINS_FILE 
+
 from script import app
 # Example function: user की withdrawal history fetch करने के लिए
 import json, os
