@@ -34,6 +34,11 @@ DELETED_PDF_FILE = os.path.join(BASE_PATH, "deleted_user_files.json")
 WITHDRAW_FILE = os.path.join(BASE_PATH, "user_withdrawal_details.json")
 GROUP_WEL_FILE = os.path.join(BASE_PATH, "GROUP_WEL.JSON")
 SYSTEM_MSG_FILE = os.path.join(BASE_PATH, "CHAT_SYSTEM_MSG.json")
+DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
+CREDENTIALS_FILE = os.path.join(BASE_DIR, "client_secrets.json")
+TOKEN_FILE = os.path.join(BASE_DIR, "token.pickle")
+LOG_FILE = os.path.join(BASE_DIR, "process_log.txt")
+
 tokens = [
     {
         "1": "YzJ0ZlpYcEVRazlSTlV4RGJFZHNUa2h4WTNWeFZXRkRTVWN5T0RsR01GazNWMVE9",
@@ -58,7 +63,6 @@ CHANNEL_IDS = [PREMIUM_CHECK_LOG, FILE_LOGS, REQUIRED_CHANNELS]
 
 import asyncio
 import os
-import requests
 
 async def send_startup_message_once():
     if os.path.exists(FLAG_FILE):
