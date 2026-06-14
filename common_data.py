@@ -11,6 +11,7 @@ is_termux = os.getenv("is_termux", "false").lower() == "true"
 DEPLOY_URL_UPLOAD = os.getenv("URL", "http://127.0.0.1:5000/upload-data")
 OWNER = int(os.getenv("OWNER", 6150091802))
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = BASE_PATH
 data_file = os.path.join(BASE_PATH, "bot_data.json")
 BOT_DATA_FILE = data_file
 DATA_FILE = data_file
