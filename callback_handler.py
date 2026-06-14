@@ -22,7 +22,12 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-
+import os
+import json
+import pickle
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
 # --- ENVIRONMENT & TIMEOUT FIX ---
 socket.setdefaulttimeout(600)
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -49,7 +54,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- SMART FILENAME SANITIZER ---
+def set_user_status(user_id: int, status: str = None):
+    # 1. डेटा लोड करें
+    try:
+        if os.path.exists(status_user_file):
+            with open(status_user_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = {}
+    except Exception:
+        data = {}
+
+    user_str = str(user_id)
+
+    # 2. अगर स्टेटस None या खाली है, तो यूज़र की एंट्री को हटा दें
+    if status is None or status == "":
+        if user_str in data:
+            del data[user_str]
+    else:
+        # अन्यथा, नया स्टेटस सेट करें
+        data[user_str] = status
+
+    # 3. वापस सेव करें
+    try:
+        with open(status_user_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        print(f"Error saving user status: {e}")
+
+# --- SMART FILENAME SANITIZER ---       
 def sanitize_filename(name):
     safe_name = re.sub(r'[\\/*?:"<>|]', '-', name)
     safe_name = re.sub(r'\s+', ' ', safe_name).strip()
@@ -230,22 +263,116 @@ async def glogout_cmd(client, message):
             "You are not currently logged in, and no authentication files were found on the server. Use `/glogin` to start a new session."
         )
 
-@app.on_message(filters.document & filters.private)
+
+@app.on_message(filters.private & StatusFilter("getting_google_drive_files") & filters.document)
 async def handle_document(client, message):
     user_id = message.from_user.id
-    if user_id != ADMIN_ID: return
     
-    doc_name = message.document.file_name
-    if doc_name in ["token.pickle", "client_secrets.json", "bot_data.json"]:
-        await message.download(file_name=os.path.join(BASE_DIR, doc_name))
+    if user_id != ADMIN_ID: 
+        return
+    
+    doc = message.document
+    doc_name = doc.file_name
+    
+    is_pickle = doc_name.endswith(".pickle")
+    is_json = doc_name.endswith(".json")
+    
+    if not (is_pickle or is_json):
+        await message.reply_text(
+            "⚠️ **Invalid File Received!**\n\n"
+            "Please upload:\n"
+            "• A `.pickle` file (Google Drive Token)\n"
+            "• A `.json` file (Google Client Secrets)"
+        )
+        return
+
+    status_msg = await message.reply_text(f"⏳ **Downloading and Verifying `{doc_name}`...**")
+    
+    # फ़ाइल को पहले अस्थायी नाम से सेव करें ताकि वैलिडेशन किया जा सके
+    temp_path = os.path.join(BASE_DIR, f"temp_{doc_name}")
+    
+    try:
+        await message.download(file_name=temp_path)
         
-        if doc_name == "token.pickle":
-            await message.reply_text("✅ `token.pickle` saved successfully! Authentication is ready.")
+        if is_pickle:
+            await status_msg.edit_text("⏳ **Checking Token Validity & Expiration...**")
+            is_valid_token = False
             
-        elif doc_name == "bot_data.json":
-            await message.reply_text("✅ `bot_data.json` updated locally. Send `/update1` to process it.")
+            try:
+                with open(temp_path, 'rb') as token:
+                    creds = pickle.load(token)
+                
+                # चेक करें कि क्या यह सही Credentials ऑब्जेक्ट है
+                if isinstance(creds, Credentials):
+                    if creds.valid:
+                        is_valid_token = True
+                    elif creds.expired and creds.refresh_token:
+                        # अगर एक्सपायर है, तो रिफ्रेश करने की कोशिश करें
+                        try:
+                            creds.refresh(Request())
+                            is_valid_token = True
+                            # रिफ्रेश हुए टोकन को वापस अस्थायी फ़ाइल में सेव करें
+                            with open(temp_path, 'wb') as token:
+                                pickle.dump(creds, token)
+                        except Exception as e:
+                            logger.error(f"Token refresh failed: {e}")
+            except Exception as e:
+                logger.error(f"Pickle Parsing Error: {e}")
             
-        elif doc_name == "client_secrets.json":
+            if not is_valid_token:
+                os.remove(temp_path)
+                return await status_msg.edit_text(
+                    "❌ **Invalid or Expired Token!**\n\n"
+                    "The uploaded `.pickle` file is corrupted, completely expired, or cannot be refreshed. Please authenticate again using a `client_secrets.json` file."
+                )
+            
+            # वैलिडेशन पास होने पर ही असली फ़ाइल को रिप्लेस करें
+            if os.path.exists(TOKEN_FILE):
+                os.remove(TOKEN_FILE)
+            os.rename(temp_path, TOKEN_FILE)
+            
+            # स्टेटस क्लियर करें क्योंकि टोकन सफलतापूर्वक सेव हो गया है
+            try:
+                set_user_status(user_id, None)
+            except:
+                pass
+
+            await status_msg.edit_text(
+                "✅ **Token Verified and Saved!**\n\n"
+                "Your Google Drive session is active and ready to use."
+            )
+            
+        elif is_json:
+            await status_msg.edit_text("⏳ **Checking Secrets File...**")
+            is_valid_secret = False
+            
+            try:
+                with open(temp_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    
+                    # चेक करें कि क्या यह असली Google OAuth फ़ाइल है
+                    if "installed" in data or "web" in data:
+                        secret_data = data.get("installed", data.get("web", {}))
+                        # ज़रूरी keys चेक करें
+                        if "client_id" in secret_data and "client_secret" in secret_data:
+                            is_valid_secret = True
+            except Exception as e:
+                logger.error(f"JSON Parsing Error: {e}")
+            
+            if not is_valid_secret:
+                os.remove(temp_path)
+                return await status_msg.edit_text(
+                    "❌ **Invalid Secrets File!**\n\n"
+                    "The file does not contain valid Google OAuth Client Secrets (missing client_id or client_secret). Please upload the correct JSON file downloaded from Google Cloud Console."
+                )
+            
+            # वैलिडेशन पास होने पर असली फ़ाइल को रिप्लेस करें
+            if os.path.exists(CREDENTIALS_FILE):
+                os.remove(CREDENTIALS_FILE)
+            os.rename(temp_path, CREDENTIALS_FILE)
+            
+            await status_msg.edit_text("⏳ **Valid Secrets detected. Generating Authentication Link...**")
+            
             try:
                 SCOPES = ['https://www.googleapis.com/auth/drive']
                 flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
@@ -254,138 +381,93 @@ async def handle_document(client, message):
                 
                 auth_sessions[user_id] = flow
                 
-                await message.reply_text(
-                    "✅ `client_secrets.json` loaded!\n\n"
-                    "🔗 **Google Drive Auth Link:**\n"
-                    f"[CLICK HERE TO AUTHORIZE]({auth_url})\n\n"
-                    "**Steps:**\n"
-                    "1. Open the link & Login.\n"
-                    "2. Ignore the 'site can't be reached' error on the blank page.\n"
-                    "3. Copy the ENTIRE URL from your browser's address bar and paste it here.",
-                    disable_web_page_preview=True
-                )
-            except Exception as e:
-                await message.reply_text(f"❌ Error generating auth link: `{e}`")
-@app.on_message(filters.private & StatusFilter("getting_google_drive_files") & filters.document)
-async def handle_document(client, message):
-    user_id = message.from_user.id
-    
-    # सिर्फ एडमिन ही फ़ाइलें अपलोड कर सकता है
-    if user_id != ADMIN_ID: 
-        return
-    
-    doc = message.document
-    doc_name = doc.file_name
-    
-    # फ़ाइल प्रकार की पहचान
-    is_pickle = doc_name.endswith(".pickle")
-    is_secrets = (doc_name == "client_secrets.json")
-    is_bot_data = (doc_name == "bot_data123.json")
-    
-    # अगर फ़ाइल अमान्य है
-    if not (is_pickle or is_secrets or is_bot_data):
-        await message.reply_text(
-            "⚠️ **Invalid File Received!**\n\n"
-            "Please upload one of the following:\n"
-            "• Any `.pickle` file (for token)\n"
-            "• `client_secrets.json` (for new auth)\n"
-            "• `bot_data123.json` (for data updates)"
-        )
-        return
-
-    # प्रोग्रेस मैसेज
-    status_msg = await message.reply_text(f"⏳ **Downloading `{doc_name}`...**")
-    
-    try:
-        # सेव करने का पाथ निर्धारित करें
-        if is_pickle:
-            save_path = TOKEN_FILE
-            target_name = "token.pickle"
-        elif is_secrets:
-            save_path = CREDENTIALS_FILE
-            target_name = "client_secrets.json"
-        else:
-            save_path = DATA_FILE
-            target_name = "bot_data.json"
-            
-        # फ़ाइल डाउनलोड करें
-        await message.download(file_name=save_path)
-        
-        # फ़ाइल के अनुसार आगे की प्रक्रिया
-        if is_pickle:
-            # अगर आपके पास स्टेटस रिसेट करने का फ़ंक्शन है (जैसे set_user_status(user_id, None)), तो आप उसे यहाँ कॉल कर सकते हैं
-            await status_msg.edit_text(
-                f"✅ **Token Saved Successfully!**\n\n"
-                f"Your file `{doc_name}` has been saved as `{target_name}`. Google Drive Authentication is now ready to use."
-            )
-            
-        elif is_bot_data:
-            await status_msg.edit_text(
-                "✅ **Data File Updated!**\n\n"
-                "`bot_data.json` has been successfully updated locally. You can now send `/update1` to process it."
-            )
-            
-        elif is_secrets:
-            await status_msg.edit_text("⏳ **File saved. Generating Authentication Link...**")
-            try:
-                SCOPES = ['https://www.googleapis.com/auth/drive']
-                flow = InstalledAppFlow.from_client_secrets_file(save_path, SCOPES)
-                flow.redirect_uri = 'http://localhost:8080/'
-                auth_url, _ = flow.authorization_url(prompt='consent')
-                
-                auth_sessions[user_id] = flow
+                # यूज़र का स्टेटस अपडेट करें जैसा आपने कहा था
+                try:
+                    set_user_status(user_id, "getting_url_for_drive")
+                except Exception as e:
+                    logger.error(f"Status Update Error: {e}")
                 
                 await status_msg.edit_text(
-                    "✅ **`client_secrets.json` Loaded!**\n\n"
-                    "🔗 **Google Drive Auth Link:**\n"
-                    f"[CLICK HERE TO AUTHORIZE]({auth_url})\n\n"
-                    "**Steps:**\n"
-                    "1. Open the link & Login.\n"
-                    "2. Ignore the 'site can't be reached' error on the blank page.\n"
-                    "3. Copy the ENTIRE URL from your browser's address bar and paste it here.",
+                    "✅ **Client Secrets Verified & Saved!**\n\n"
+                    "🔗 **Click the link below to Authorize:**\n"
+                    f"[👉 CLICK HERE TO LOGIN]({auth_url})\n\n"
+                    "📋 **Or Copy the URL below:**\n"
+                    f"`{auth_url}`\n\n"
+                    "**Instructions:**\n"
+                    "1. Open the link and login with your Google Account.\n"
+                    "2. Accept the permissions.\n"
+                    "3. The page will redirect and show an error (e.g., 'localhost refused to connect'). This is normal!\n"
+                    "4. Copy the ENTIRE URL from your browser's address bar and send it back to me here.",
                     disable_web_page_preview=True
                 )
             except Exception as e:
                 logger.error(f"Auth link generation error: {e}")
                 await status_msg.edit_text(
                     f"❌ **Error Generating Auth Link:**\n`{e}`\n\n"
-                    "Please ensure your JSON file is a valid Google OAuth Client Secrets file and try again."
+                    "Please try again."
                 )
                 
     except Exception as e:
         logger.error(f"Download or processing error for {doc_name}: {e}")
         await status_msg.edit_text(
-            f"❌ **Error Processing File:**\n`{e}`\n\n"
-            "An unexpected error occurred while downloading or saving the file."
+            f"❌ **Unexpected Error:**\n`{e}`\n\n"
+            "An error occurred while downloading or verifying the file."
         )
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
-@app.on_message(filters.text & filters.private)
+@app.on_message(filters.private & filters.text & StatusFilter("getting_url_for_drive"))
 async def handle_auth_response(client, message):
     user_id = message.from_user.id
-    if message.text.startswith("/") or user_id not in auth_sessions:
-        return
+    
+    # चेक करें कि ऑथेंटिकेशन सेशन मौजूद है या नहीं
+    if user_id not in auth_sessions:
+        return await message.reply_text("❌ **Session Expired or Not Found!**\n\nPlease upload your `client_secrets.json` file again to restart the login process.")
         
     flow = auth_sessions[user_id]
     text_input = message.text.strip()
-    status_msg = await message.reply_text("⏳ Verifying authentication token...")
+    status_msg = await message.reply_text("⏳ **Verifying Authentication URL...**")
     
     try:
-        if text_input.startswith("http"):
-            flow.fetch_token(authorization_response=text_input)
-        else:
-            flow.fetch_token(code=text_input)
-            
+        # URL से टोकन प्राप्त करें
+        flow.fetch_token(authorization_response=text_input)
         creds = flow.credentials
+        
+        # सेव करने से पहले टोकन की वैलिडिटी चेक करें
+        if not creds or not creds.valid:
+            raise Exception("Generated credentials are not valid.")
+            
+        # टोकन को सुरक्षित रूप से सेव करें
         with open(TOKEN_FILE, 'wb') as token:
             pickle.dump(creds, token)
             
-        del auth_sessions[user_id] 
-        await status_msg.edit_text("✅ **Authentication Complete!** `token.pickle` saved locally.")
-        await client.send_document(chat_id=user_id, document=TOKEN_FILE, caption="📁 Your backup `token.pickle` file.")
+        # मेमोरी से सेशन हटा दें
+        del auth_sessions[user_id]
+        
+        # यूज़र का स्टेटस वापस सामान्य (None) कर दें
+        try:
+            set_user_status(user_id, None)
+        except Exception as e:
+            logger.error(f"Status Reset Error for user {user_id}: {e}")
+            
+        await status_msg.edit_text(
+            "✅ **Authentication Complete!**\n\n"
+            "Your Google Drive is now successfully linked. `token.pickle` has been generated and saved on the server."
+        )
+        
+        # यूज़र को बैकअप फ़ाइल भेजें
+        await client.send_document(
+            chat_id=user_id, 
+            document=TOKEN_FILE, 
+            caption="📁 **Backup `token.pickle`**\n\nSave this file securely. You can forward this directly to the bot next time to skip the login process."
+        )
         
     except Exception as e:
-        await status_msg.edit_text(f"❌ **Authentication Failed:**\n`{e}`\n\nPlease try sending `client_secrets.json` again.")
-
+        logger.error(f"Auth verification failed for {user_id}: {e}")
+        await status_msg.edit_text(
+            f"❌ **Authentication Failed:**\n`{e}`\n\n"
+            "Please ensure you copied the ENTIRE URL correctly, or upload `client_secrets.json` to generate a new link."
+        )
 @app.on_message(filters.command("update1") & filters.private)
 async def update_drive_files(client, message):
     user_id = message.from_user.id
@@ -397,8 +479,12 @@ async def update_drive_files(client, message):
     if not os.path.exists(DATA_FILE):
         return await status_msg.edit_text(f"❌ Target file `{DATA_FILE}` not found in the root directory!")
 
+    # 1. गूगल ड्राइव ऑथेंटिकेशन चेक - लॉग इन न होने पर /glogin के लिए प्रॉम्प्ट
     if not get_drive_service():
-        return await status_msg.edit_text("⚠️ **Google Drive Auth Required!**\nPlease upload a valid `token.pickle`.")
+        return await status_msg.edit_text(
+            "⚠️ **Google Drive Auth Required!**\n\n"
+            "Your session is missing or expired. Please send the `/glogin` command to authenticate and start a new session before updating files."
+        )
 
     try:
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
@@ -408,15 +494,24 @@ async def update_drive_files(client, message):
 
     await safe_edit_tracking_message(status_msg, "🔍 Scanning JSON for documents...")
     
+    # प्रोग्रेस ट्रैकर मैसेज को पिन करना
+    try:
+        await status_msg.pin(disable_notification=True)
+    except Exception as e:
+        logger.warning(f"Could not pin the tracker message: {e}")
+    
     root_node = full_data.get("data", full_data)
     target_items = []
     extract_all_items(root_node, target_items)
     total_files = len(target_items)
     
     if total_files == 0:
+        try:
+            await status_msg.unpin()
+        except:
+            pass
         return await status_msg.edit_text("🎉 **No files found in JSON payload!**")
 
-    # Fetching Bot Username for Root Folder Isolation
     try:
         me = await client.get_me()
         bot_username = f"@{me.username}"
@@ -440,6 +535,7 @@ async def update_drive_files(client, message):
     for index, target in enumerate(target_items, start=1):
         item = target["item"]
         folder_path = target["path"]
+        folder_path_str = ' -> '.join(folder_path) if folder_path else 'Root'
         
         if folder_path not in seen_names_in_folders:
             seen_names_in_folders[folder_path] = set()
@@ -456,63 +552,95 @@ async def update_drive_files(client, message):
         upload_name = json_file_name if json_file_name.lower().endswith(".pdf") else f"{json_file_name}.pdf"
         item["name"] = upload_name 
         
-        # Check if already uploaded
+        # स्किप लॉजिक
         if item.get("file_url") and item["file_url"].strip() != "":
             skipped_count += 1
             continue 
 
         file_id = item.get("file_id")
         
-        progress_text = f"🔄 **Processing [{index}/{total_files}]**\n\n📄 `{upload_name}`\n⏳ Downloading from Telegram..."
-        await safe_edit_tracking_message(status_msg, progress_text)
+        # पिन किए गए मैसेज को अपडेट करना (डैशबोर्ड की तरह)
+        tracker_text = (
+            f"📌 **LIVE PROGRESS TRACKER**\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"📦 **Total Files:** `{total_files}`\n"
+            f"✅ **Uploaded:** `{success_count}`\n"
+            f"⏭️ **Skipped:** `{skipped_count}`\n"
+            f"❌ **Errors:** `{error_count}`\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"🔄 **Currently Processing [{index}/{total_files}]:**\n"
+            f"📄 `{upload_name}`\n"
+            f"⏳ Downloading from Telegram..."
+        )
+        await safe_edit_tracking_message(status_msg, tracker_text)
         
         try:
-            # Resolve exact Drive path based on JSON structure
             target_drive_folder_id = await resolve_drive_path(folder_path)
             exact_local_path = os.path.join(DOWNLOADS_DIR, upload_name)
             
-            # Download from TG
+            # टेलीग्राम से डाउनलोड
             local_path = await app.download_media(file_id, file_name=exact_local_path)
             if not local_path: 
                 raise Exception("Media download returned empty path.")
 
-            # Upload to Drive
-            await safe_edit_tracking_message(status_msg, progress_text.replace("Downloading from Telegram...", "Uploading to Google Drive..."))
+            # ड्राइव पर अपलोड
+            tracker_text = tracker_text.replace("Downloading from Telegram...", "Uploading to Google Drive...")
+            await safe_edit_tracking_message(status_msg, tracker_text)
+            
             direct_link = await asyncio.to_thread(upload_to_drive, local_path, upload_name, target_drive_folder_id)
             
-            # Apply Link and save state
             item["file_url"] = direct_link
             success_count += 1
             
+            # अपलोड के तुरंत बाद लोकल फाइल डिलीट करना
             if os.path.exists(local_path): 
                 os.remove(local_path)
             
             with open(DATA_FILE, 'w', encoding='utf-8') as f:
                 json.dump(full_data, f, ensure_ascii=False, indent=4)
                 
-            # Inform admin about individual successful upload
-            success_msg = f"✅ **File Uploaded! [{index}/{total_files}]**\n\n📄 `{upload_name}`\n🔗 **Link:** [View Document]({direct_link})"
-            await safe_edit_tracking_message(status_msg, success_msg)
-            await asyncio.sleep(2) # Brief pause so admin can see the link
+            # हर सफल अपलोड के लिए यूज़र को अलग से पूरी जानकारी भेजना
+            individual_success_msg = (
+                f"✅ **File Successfully Processed!**\n\n"
+                f"📄 **Name:** `{upload_name}`\n"
+                f"📂 **Saved Path:** `{folder_path_str}`\n"
+                f"🆔 **File ID:** `{file_id}`\n"
+                f"🔗 **Drive Link:** [View Document]({direct_link})"
+            )
+            await message.reply_text(individual_success_msg, disable_web_page_preview=True)
+            
+            await asyncio.sleep(1) # थोड़ा विराम
             
         except Exception as e:
             error_count += 1
             logger.error(f"Failed processing '{upload_name}': {e}")
-            await safe_edit_tracking_message(status_msg, f"❌ **Error [{index}/{total_files}]**\n\n📄 `{upload_name}`\n⚠️ Details: `{e}`")
-            await asyncio.sleep(3)
+            
+            # एरर आने पर भी अलग से मैसेज भेजना
+            error_msg = (
+                f"❌ **Failed to Process File!**\n\n"
+                f"📄 **Name:** `{upload_name}`\n"
+                f"📂 **Path:** `{folder_path_str}`\n"
+                f"⚠️ **Error:** `{e}`"
+            )
+            await message.reply_text(error_msg)
+            await asyncio.sleep(2)
 
-    # Final Report
+    # अंतिम रिपोर्ट और पिन हटाना
     final_report = (
         f"🏁 **Execution Completed!**\n\n"
-        f"📁 Base Folder: `{bot_username}`\n"
-        f"💾 JSON Updated: `bot_data.json`\n\n"
+        f"📁 **Base Folder:** `{bot_username}`\n"
+        f"💾 **JSON Updated:** `bot_data.json`\n\n"
         f"📊 **Final Statistics:**\n"
         f"✅ New Uploads: `{success_count}`\n"
-        f"⏭️ Skipped (Existing): `{skipped_count}`\n"
+        f"⏭️ Skipped: `{skipped_count}`\n"
         f"❌ Failed: `{error_count}`\n"
     )
     await safe_edit_tracking_message(status_msg, final_report)
-
+    
+    try:
+        await status_msg.unpin()
+    except:
+        pass
 
 def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
     try:
@@ -834,18 +962,7 @@ def find_folder_by_id(current_folder: dict, target_id: str):
                 return result
 
     return None
-def set_user_status(user_id: int, status: str):
-    try:
-        with open(status_user_file, "r") as f:
-            data = json.load(f)
-    except:
-        data = {}
-
-    data[str(user_id)] = status
-
-    with open(status_user_file, "w") as f:
-        json.dump(data, f)
-        
+ 
 def save_temp_folder(user_id: int, folder_data: dict):
     try:
         with open(temp_folder_file, "r") as f:
