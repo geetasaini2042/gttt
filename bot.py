@@ -771,6 +771,7 @@ async def receive_command_description(client, message):
 
     clear_user_status(user_id)
     await message.reply_text(f"✅ Command *{cmd}* added successfully with description:\n\n`{desc}`")
+import callback_handler
 @app.on_message(filters.regex(r"^/(\w+)") & filters.private)
 async def handle_any_command(client, message: Message):
     user = message.from_user
@@ -827,7 +828,7 @@ def clear_user_status(user_id):
 
 
 import delete_group_url_msg
-import callback_handler,command
+import command
 import ai
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask)
