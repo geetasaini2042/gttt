@@ -38,7 +38,7 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 CREDENTIALS_FILE = os.path.join(BASE_DIR, "client_secrets.json")
 TOKEN_FILE = os.path.join(BASE_DIR, "token.pickle")
 LOG_FILE = os.path.join(BASE_DIR, "process_log.txt")
-
+DRIVE_FOLDER_ID = "1D45g6UNdAuQaWeadfuNc8bjydvx5OIBz"
 tokens = [
     {
         "1": "YzJ0ZlpYcEVRazlSTlV4RGJFZHNUa2h4WTNWeFZXRkRTVWN5T0RsR01GazNWMVE9",
