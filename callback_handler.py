@@ -10,14 +10,10 @@ from filters.status_filters import StatusFilter
 
 #save_data_file_to_mongo()
 
-import os
-import json
 import asyncio
 import logging
 import pickle
 import socket
-import re
-from dotenv import load_dotenv
 
 
 # Google API Imports
@@ -40,7 +36,7 @@ DATA_FILE = os.path.join(BASE_DIR, "bot_data.json")
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
 
-ADMIN_ID = 6150091802
+ADMIN_ID = OWNER
 
 # --- LOGGING SETUP ---
 logging.basicConfig(
@@ -160,13 +156,79 @@ async def safe_edit_tracking_message(message: Message, new_text: str):
         logger.warning(f"Failed to edit tracking message: {e}")
 
 # --- COMMANDS ---
-@app.on_message(filters.command("start") & filters.private)
-async def start_cmd(client, message):
-    await message.reply_text(
-        "🤖 **Bot is fully operational.**\n\n"
-        "🔹 Send `/update1` to read `bot_data.json` and upload missing files to Google Drive.\n"
-        "🔹 Send `client_secrets.json` or `token.pickle` to manage Drive Authentication."
+
+@app.on_message(filters.command("glogin") & filters.private)
+async def glogin_cmd(client, message):
+    user_id = message.from_user.id
+    
+    status_msg = await message.reply_text("⏳ **Checking Google Drive connection status...**")
+    
+    # 1. पहले चेक करें कि क्या लॉगिन पहले से मौजूद और सक्रिय (active) है
+    drive_service = get_drive_service()
+    
+    if drive_service:
+        # अगर सेशन सक्रिय है
+        await status_msg.edit_text(
+            "✅ **Already Logged In!**\n\n"
+            "Your Google Drive session is currently active and valid. "
+            "You do not need to authenticate again."
+        )
+        return
+        
+    # 2. अगर सेशन नहीं है या एक्सपायर हो चुका है
+    prompt_text = (
+        "⚠️ **Google Drive Authentication Required!**\n\n"
+        "Your session is either expired or not found. Please upload your authentication file to continue:\n\n"
+        "🔹 **JSON File:** The filename must strictly be `client_secrets.json`.\n"
+        "🔹 **Pickle File:** Can be any name, as long as it has a `.pickle` extension (e.g., `token.pickle`).\n\n"
+        "Waiting for your file..."
     )
+    await status_msg.edit_text(prompt_text)
+    
+    # 3. यूज़र का स्टेटस सेव करें (सुनिश्चित करें कि यह फ़ंक्शन आपके कोड में ऊपर परिभाषित हो)
+    try:
+        set_user_status(user_id, "getting_google_drive_files")
+    except Exception as e:
+        logger.error(f"Status update failed for user {user_id}: {e}")
+        
+@app.on_message(filters.command("glogout") & filters.private)
+async def glogout_cmd(client, message):
+    user_id = message.from_user.id
+    
+    # एडमिन चेक (अगर आप चाहते हैं कि सिर्फ एडमिन ही लॉगआउट कर सके)
+    if hasattr(message, "from_user") and message.from_user.id != ADMIN_ID:
+        return await message.reply_text("⛔ **Unauthorized Access.**")
+        
+    status_msg = await message.reply_text("⏳ **Processing Logout Request...**")
+    
+    files_deleted = False
+    
+    # 1. token.pickle फ़ाइल को हटाएँ (मुख्य सेशन फ़ाइल)
+    if os.path.exists(TOKEN_FILE):
+        os.remove(TOKEN_FILE)
+        files_deleted = True
+        
+    # 2. client_secrets.json फ़ाइल को हटाएँ (सुरक्षा के लिए)
+    if os.path.exists(CREDENTIALS_FILE):
+        os.remove(CREDENTIALS_FILE)
+        files_deleted = True
+        
+    # 3. अगर कोई पेंडिंग ऑथेंटिकेशन सेशन चल रहा हो तो उसे भी क्लियर करें
+    if user_id in auth_sessions:
+        del auth_sessions[user_id]
+        
+    # 4. यूज़र को फाइनल स्टेटस बताएँ
+    if files_deleted:
+        await status_msg.edit_text(
+            "✅ **Logged Out Successfully!**\n\n"
+            "Your Google Drive session has been completely cleared, and all authentication files have been safely removed from the server.\n\n"
+            "Use `/glogin` whenever you want to authenticate again."
+        )
+    else:
+        await status_msg.edit_text(
+            "⚠️ **No Active Session Found.**\n\n"
+            "You are not currently logged in, and no authentication files were found on the server. Use `/glogin` to start a new session."
+        )
 
 @app.on_message(filters.document & filters.private)
 async def handle_document(client, message):
@@ -204,6 +266,98 @@ async def handle_document(client, message):
                 )
             except Exception as e:
                 await message.reply_text(f"❌ Error generating auth link: `{e}`")
+@app.on_message(filters.private & StatusFilter("getting_google_drive_files") & filters.document)
+async def handle_document(client, message):
+    user_id = message.from_user.id
+    
+    # सिर्फ एडमिन ही फ़ाइलें अपलोड कर सकता है
+    if user_id != ADMIN_ID: 
+        return
+    
+    doc = message.document
+    doc_name = doc.file_name
+    
+    # फ़ाइल प्रकार की पहचान
+    is_pickle = doc_name.endswith(".pickle")
+    is_secrets = (doc_name == "client_secrets.json")
+    is_bot_data = (doc_name == "bot_data123.json")
+    
+    # अगर फ़ाइल अमान्य है
+    if not (is_pickle or is_secrets or is_bot_data):
+        await message.reply_text(
+            "⚠️ **Invalid File Received!**\n\n"
+            "Please upload one of the following:\n"
+            "• Any `.pickle` file (for token)\n"
+            "• `client_secrets.json` (for new auth)\n"
+            "• `bot_data123.json` (for data updates)"
+        )
+        return
+
+    # प्रोग्रेस मैसेज
+    status_msg = await message.reply_text(f"⏳ **Downloading `{doc_name}`...**")
+    
+    try:
+        # सेव करने का पाथ निर्धारित करें
+        if is_pickle:
+            save_path = TOKEN_FILE
+            target_name = "token.pickle"
+        elif is_secrets:
+            save_path = CREDENTIALS_FILE
+            target_name = "client_secrets.json"
+        else:
+            save_path = DATA_FILE
+            target_name = "bot_data.json"
+            
+        # फ़ाइल डाउनलोड करें
+        await message.download(file_name=save_path)
+        
+        # फ़ाइल के अनुसार आगे की प्रक्रिया
+        if is_pickle:
+            # अगर आपके पास स्टेटस रिसेट करने का फ़ंक्शन है (जैसे set_user_status(user_id, None)), तो आप उसे यहाँ कॉल कर सकते हैं
+            await status_msg.edit_text(
+                f"✅ **Token Saved Successfully!**\n\n"
+                f"Your file `{doc_name}` has been saved as `{target_name}`. Google Drive Authentication is now ready to use."
+            )
+            
+        elif is_bot_data:
+            await status_msg.edit_text(
+                "✅ **Data File Updated!**\n\n"
+                "`bot_data.json` has been successfully updated locally. You can now send `/update1` to process it."
+            )
+            
+        elif is_secrets:
+            await status_msg.edit_text("⏳ **File saved. Generating Authentication Link...**")
+            try:
+                SCOPES = ['https://www.googleapis.com/auth/drive']
+                flow = InstalledAppFlow.from_client_secrets_file(save_path, SCOPES)
+                flow.redirect_uri = 'http://localhost:8080/'
+                auth_url, _ = flow.authorization_url(prompt='consent')
+                
+                auth_sessions[user_id] = flow
+                
+                await status_msg.edit_text(
+                    "✅ **`client_secrets.json` Loaded!**\n\n"
+                    "🔗 **Google Drive Auth Link:**\n"
+                    f"[CLICK HERE TO AUTHORIZE]({auth_url})\n\n"
+                    "**Steps:**\n"
+                    "1. Open the link & Login.\n"
+                    "2. Ignore the 'site can't be reached' error on the blank page.\n"
+                    "3. Copy the ENTIRE URL from your browser's address bar and paste it here.",
+                    disable_web_page_preview=True
+                )
+            except Exception as e:
+                logger.error(f"Auth link generation error: {e}")
+                await status_msg.edit_text(
+                    f"❌ **Error Generating Auth Link:**\n`{e}`\n\n"
+                    "Please ensure your JSON file is a valid Google OAuth Client Secrets file and try again."
+                )
+                
+    except Exception as e:
+        logger.error(f"Download or processing error for {doc_name}: {e}")
+        await status_msg.edit_text(
+            f"❌ **Error Processing File:**\n`{e}`\n\n"
+            "An unexpected error occurred while downloading or saving the file."
+        )
 
 @app.on_message(filters.text & filters.private)
 async def handle_auth_response(client, message):
