@@ -1,7 +1,7 @@
 from script import app, get_created_by_from_folder, is_user_action_allowed,save_data_file_to_mongo
 import json, re, os, requests, uuid
 from typing import Union
-from pyrogram.errors import RPCError
+from pyrogram.errors import RPCError, FloodWait 
 from common_data import data_file, status_user_file, temp_folder_file, temp_url_file, temp_webapp_file,temp_file_json, DEPLOY_URL_UPLOAD,ADMINS, FILE_LOGS,DEPLOY_URL, PREMIUM_CHECK_LOG, send_startup_message_once, is_termux, pre_file
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, InputMediaDocument, Message
@@ -9,6 +9,355 @@ from collections import defaultdict
 from filters.status_filters import StatusFilter
 
 #save_data_file_to_mongo()
+
+import os
+import json
+import asyncio
+import logging
+import pickle
+import socket
+import re
+from dotenv import load_dotenv
+
+
+# Google API Imports
+from common_data import DRIVE_FOLDER_ID, OWNER, 
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+# --- ENVIRONMENT & TIMEOUT FIX ---
+socket.setdefaulttimeout(600)
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
+DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
+CREDENTIALS_FILE = os.path.join(BASE_DIR, "client_secrets.json")
+TOKEN_FILE = os.path.join(BASE_DIR, "token.pickle")
+LOG_FILE = os.path.join(BASE_DIR, "process_log.txt")
+DATA_FILE = os.path.join(BASE_DIR, "bot_data.json")
+
+os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+
+
+ADMIN_ID = 6150091802
+
+# --- LOGGING SETUP ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# --- SMART FILENAME SANITIZER ---
+def sanitize_filename(name):
+    safe_name = re.sub(r'[\\/*?:"<>|]', '-', name)
+    safe_name = re.sub(r'\s+', ' ', safe_name).strip()
+    return safe_name
+
+# --- GOOGLE DRIVE AUTHENTICATION ---
+def get_drive_service():
+    SCOPES = ['https://www.googleapis.com/auth/drive']
+    creds = None
+    if os.path.exists(TOKEN_FILE):
+        with open(TOKEN_FILE, 'rb') as token:
+            creds = pickle.load(token)
+            
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+                with open(TOKEN_FILE, 'wb') as token:
+                    pickle.dump(creds, token)
+            except Exception as e:
+                logger.error(f"Failed to refresh token: {e}")
+                return None
+        else:
+            return None # Requires user intervention
+            
+    return build('drive', 'v3', credentials=creds, cache_discovery=False)
+
+# --- GOOGLE DRIVE FOLDER SYSTEM ---
+def get_or_create_drive_folder(folder_name, parent_id):
+    try:
+        drive_service = get_drive_service()
+        safe_folder_name = folder_name.replace("'", "\\'")
+        query = f"name='{safe_folder_name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+        results = drive_service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+        items = results.get('files', [])
+        
+        if items:
+            return items[0]['id']
+        else:
+            file_metadata = {
+                'name': folder_name,
+                'mimeType': 'application/vnd.google-apps.folder',
+                'parents': [parent_id]
+            }
+            folder = drive_service.files().create(body=file_metadata, fields='id').execute()
+            return folder.get('id')
+    except Exception as e:
+        logger.error(f"Error creating folder {folder_name}: {e}")
+        raise e
+
+# --- GOOGLE DRIVE UPLOAD FUNCTION ---
+def upload_to_drive(local_path, upload_name, parent_folder_id):
+    try:
+        drive_service = get_drive_service()
+        file_metadata = {'name': upload_name, 'parents': [parent_folder_id]}
+        media = MediaFileUpload(local_path, resumable=True, chunksize=1024*1024*5) 
+        
+        uploaded_file = drive_service.files().create(
+            body=file_metadata, media_body=media, fields='id'
+        ).execute()
+        
+        drive_file_id = uploaded_file.get('id')
+        drive_service.permissions().create(
+            fileId=drive_file_id, body={'type': 'anyone', 'role': 'reader'}
+        ).execute()
+        
+        return f"https://drive.google.com/uc?id={drive_file_id}&export=download"
+    except Exception as e:
+        logger.error(f"Error uploading {upload_name} to Drive: {e}")
+        raise e
+
+# --- JSON TRAVERSAL ---
+def extract_all_items(node, targets_list, current_path=()):
+    if isinstance(node, dict):
+        node_type = node.get("type")
+        if node_type == "folder":
+            folder_name = node.get("name", "Unnamed_Folder")
+            new_path = current_path + (folder_name,)
+            if "items" in node:
+                extract_all_items(node["items"], targets_list, new_path)
+                
+        elif node_type == "file" and node.get("sub_type") == "document" and "file_id" in node:
+            targets_list.append({"item": node, "path": current_path})
+        
+        elif "items" in node:
+            extract_all_items(node["items"], targets_list, current_path)
+            
+    elif isinstance(node, list):
+        for item in node:
+            extract_all_items(item, targets_list, current_path)
+auth_sessions = {}
+
+async def safe_edit_tracking_message(message: Message, new_text: str):
+    if not message: return
+    await asyncio.sleep(2)
+    try:
+        if message.media: await message.edit_caption(new_text)
+        else: await message.edit_text(new_text, disable_web_page_preview=True)
+    except FloodWait as e:
+        await asyncio.sleep(e.value + 2)
+        if message.media: await message.edit_caption(new_text)
+        else: await message.edit_text(new_text, disable_web_page_preview=True)
+    except Exception as e:
+        logger.warning(f"Failed to edit tracking message: {e}")
+
+# --- COMMANDS ---
+@app.on_message(filters.command("start") & filters.private)
+async def start_cmd(client, message):
+    await message.reply_text(
+        "🤖 **Bot is fully operational.**\n\n"
+        "🔹 Send `/update1` to read `bot_data.json` and upload missing files to Google Drive.\n"
+        "🔹 Send `client_secrets.json` or `token.pickle` to manage Drive Authentication."
+    )
+
+@app.on_message(filters.document & filters.private)
+async def handle_document(client, message):
+    user_id = message.from_user.id
+    if user_id != ADMIN_ID: return
+    
+    doc_name = message.document.file_name
+    if doc_name in ["token.pickle", "client_secrets.json", "bot_data.json"]:
+        await message.download(file_name=os.path.join(BASE_DIR, doc_name))
+        
+        if doc_name == "token.pickle":
+            await message.reply_text("✅ `token.pickle` saved successfully! Authentication is ready.")
+            
+        elif doc_name == "bot_data.json":
+            await message.reply_text("✅ `bot_data.json` updated locally. Send `/update1` to process it.")
+            
+        elif doc_name == "client_secrets.json":
+            try:
+                SCOPES = ['https://www.googleapis.com/auth/drive']
+                flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
+                flow.redirect_uri = 'http://localhost:8080/'
+                auth_url, _ = flow.authorization_url(prompt='consent')
+                
+                auth_sessions[user_id] = flow
+                
+                await message.reply_text(
+                    "✅ `client_secrets.json` loaded!\n\n"
+                    "🔗 **Google Drive Auth Link:**\n"
+                    f"[CLICK HERE TO AUTHORIZE]({auth_url})\n\n"
+                    "**Steps:**\n"
+                    "1. Open the link & Login.\n"
+                    "2. Ignore the 'site can't be reached' error on the blank page.\n"
+                    "3. Copy the ENTIRE URL from your browser's address bar and paste it here.",
+                    disable_web_page_preview=True
+                )
+            except Exception as e:
+                await message.reply_text(f"❌ Error generating auth link: `{e}`")
+
+@app.on_message(filters.text & filters.private)
+async def handle_auth_response(client, message):
+    user_id = message.from_user.id
+    if message.text.startswith("/") or user_id not in auth_sessions:
+        return
+        
+    flow = auth_sessions[user_id]
+    text_input = message.text.strip()
+    status_msg = await message.reply_text("⏳ Verifying authentication token...")
+    
+    try:
+        if text_input.startswith("http"):
+            flow.fetch_token(authorization_response=text_input)
+        else:
+            flow.fetch_token(code=text_input)
+            
+        creds = flow.credentials
+        with open(TOKEN_FILE, 'wb') as token:
+            pickle.dump(creds, token)
+            
+        del auth_sessions[user_id] 
+        await status_msg.edit_text("✅ **Authentication Complete!** `token.pickle` saved locally.")
+        await client.send_document(chat_id=user_id, document=TOKEN_FILE, caption="📁 Your backup `token.pickle` file.")
+        
+    except Exception as e:
+        await status_msg.edit_text(f"❌ **Authentication Failed:**\n`{e}`\n\nPlease try sending `client_secrets.json` again.")
+
+@app.on_message(filters.command("update1") & filters.private)
+async def update_drive_files(client, message):
+    user_id = message.from_user.id
+    if user_id != ADMIN_ID:
+        return await message.reply_text("⛔ Unauthorized access.")
+
+    status_msg = await message.reply_text("⏳ **Initializing Process...**\nReading local JSON file.")
+
+    if not os.path.exists(DATA_FILE):
+        return await status_msg.edit_text(f"❌ Target file `{DATA_FILE}` not found in the root directory!")
+
+    if not get_drive_service():
+        return await status_msg.edit_text("⚠️ **Google Drive Auth Required!**\nPlease upload a valid `token.pickle`.")
+
+    try:
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            full_data = json.load(f)
+    except Exception as e:
+        return await status_msg.edit_text(f"❌ Failed to parse JSON: `{e}`")
+
+    await safe_edit_tracking_message(status_msg, "🔍 Scanning JSON for documents...")
+    
+    root_node = full_data.get("data", full_data)
+    target_items = []
+    extract_all_items(root_node, target_items)
+    total_files = len(target_items)
+    
+    if total_files == 0:
+        return await status_msg.edit_text("🎉 **No files found in JSON payload!**")
+
+    # Fetching Bot Username for Root Folder Isolation
+    try:
+        me = await client.get_me()
+        bot_username = f"@{me.username}"
+        await safe_edit_tracking_message(status_msg, f"📂 Establishing root directory for `{bot_username}` in Drive...")
+        bot_root_folder_id = await asyncio.to_thread(get_or_create_drive_folder, bot_username, DRIVE_FOLDER_ID)
+    except Exception as e:
+        return await status_msg.edit_text(f"❌ Failed to create/locate bot root folder: `{e}`")
+
+    folder_cache = {(): bot_root_folder_id}
+    seen_names_in_folders = {}
+    success_count, error_count, skipped_count = 0, 0, 0
+
+    async def resolve_drive_path(path_tuple):
+        if path_tuple in folder_cache: 
+            return folder_cache[path_tuple]
+        parent_id = await resolve_drive_path(path_tuple[:-1])
+        current_id = await asyncio.to_thread(get_or_create_drive_folder, path_tuple[-1], parent_id)
+        folder_cache[path_tuple] = current_id
+        return current_id
+
+    for index, target in enumerate(target_items, start=1):
+        item = target["item"]
+        folder_path = target["path"]
+        
+        if folder_path not in seen_names_in_folders:
+            seen_names_in_folders[folder_path] = set()
+            
+        safe_original_name = sanitize_filename(item.get("name", f"Unnamed_{index}"))
+        json_file_name = safe_original_name
+        counter = 1
+        
+        while json_file_name in seen_names_in_folders[folder_path]:
+            json_file_name = f"{safe_original_name} ({counter})"
+            counter += 1
+            
+        seen_names_in_folders[folder_path].add(json_file_name)
+        upload_name = json_file_name if json_file_name.lower().endswith(".pdf") else f"{json_file_name}.pdf"
+        item["name"] = upload_name 
+        
+        # Check if already uploaded
+        if item.get("file_url") and item["file_url"].strip() != "":
+            skipped_count += 1
+            continue 
+
+        file_id = item.get("file_id")
+        
+        progress_text = f"🔄 **Processing [{index}/{total_files}]**\n\n📄 `{upload_name}`\n⏳ Downloading from Telegram..."
+        await safe_edit_tracking_message(status_msg, progress_text)
+        
+        try:
+            # Resolve exact Drive path based on JSON structure
+            target_drive_folder_id = await resolve_drive_path(folder_path)
+            exact_local_path = os.path.join(DOWNLOADS_DIR, upload_name)
+            
+            # Download from TG
+            local_path = await app.download_media(file_id, file_name=exact_local_path)
+            if not local_path: 
+                raise Exception("Media download returned empty path.")
+
+            # Upload to Drive
+            await safe_edit_tracking_message(status_msg, progress_text.replace("Downloading from Telegram...", "Uploading to Google Drive..."))
+            direct_link = await asyncio.to_thread(upload_to_drive, local_path, upload_name, target_drive_folder_id)
+            
+            # Apply Link and save state
+            item["file_url"] = direct_link
+            success_count += 1
+            
+            if os.path.exists(local_path): 
+                os.remove(local_path)
+            
+            with open(DATA_FILE, 'w', encoding='utf-8') as f:
+                json.dump(full_data, f, ensure_ascii=False, indent=4)
+                
+            # Inform admin about individual successful upload
+            success_msg = f"✅ **File Uploaded! [{index}/{total_files}]**\n\n📄 `{upload_name}`\n🔗 **Link:** [View Document]({direct_link})"
+            await safe_edit_tracking_message(status_msg, success_msg)
+            await asyncio.sleep(2) # Brief pause so admin can see the link
+            
+        except Exception as e:
+            error_count += 1
+            logger.error(f"Failed processing '{upload_name}': {e}")
+            await safe_edit_tracking_message(status_msg, f"❌ **Error [{index}/{total_files}]**\n\n📄 `{upload_name}`\n⚠️ Details: `{e}`")
+            await asyncio.sleep(3)
+
+    # Final Report
+    final_report = (
+        f"🏁 **Execution Completed!**\n\n"
+        f"📁 Base Folder: `{bot_username}`\n"
+        f"💾 JSON Updated: `bot_data.json`\n\n"
+        f"📊 **Final Statistics:**\n"
+        f"✅ New Uploads: `{success_count}`\n"
+        f"⏭️ Skipped (Existing): `{skipped_count}`\n"
+        f"❌ Failed: `{error_count}`\n"
+    )
+    await safe_edit_tracking_message(status_msg, final_report)
 
 
 def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
