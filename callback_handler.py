@@ -189,6 +189,115 @@ async def safe_edit_tracking_message(message: Message, new_text: str):
         logger.warning(f"Failed to edit tracking message: {e}")
 
 # --- COMMANDS ---
+import time
+import os
+
+# फ़ाइल साइज़ को MB या KB में बदलने के लिए हेल्पर फ़ंक्शन
+def format_size(size_bytes):
+    if not size_bytes:
+        return "Unknown Size"
+    if size_bytes >= 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.2f} MB"
+    elif size_bytes >= 1024:
+        return f"{size_bytes / 1024:.2f} KB"
+    else:
+        return f"{size_bytes} Bytes"
+
+@app.on_message(filters.command("g_upload") & filters.private)
+async def direct_g_upload(client, message):
+    user_id = message.from_user.id
+    
+    # एडमिन वेरिफिकेशन
+    if user_id != ADMIN_ID:
+        return await message.reply_text("⛔ **Unauthorized access.**")
+
+    # चेक करें कि क्या कमांड किसी मीडिया के रिप्लाई में है
+    if not message.reply_to_message:
+        return await message.reply_text("⚠️ **Invalid Usage!**\n\nPlease reply to a document, photo, or video with `/g_upload`.")
+
+    target_media = message.reply_to_message
+    media_obj = target_media.document or target_media.video or target_media.photo
+    
+    if not media_obj:
+        return await message.reply_text("⚠️ **Unsupported Media!**\n\nPlease reply to a valid document, photo, or video.")
+    status_msg = await message.reply_text("⏳ **Initializing Direct Upload...**")
+    if not get_drive_service():
+        return await status_msg.edit_text("⚠️ **Google Drive Auth Required!**\n\nPlease use `/glogin` to authenticate first.")
+    if hasattr(media_obj, "file_name") and media_obj.file_name:
+        raw_name = media_obj.file_name
+    else:
+        ext = ".jpg" if target_media.photo else ".mp4" if target_media.video else ".unknown"
+        raw_name = f"uploaded_media_{int(time.time())}{ext}"
+
+    safe_name = sanitize_filename(raw_name)
+    
+    # फाइल का साइज़ निकालें और फॉर्मेट करें
+    file_size_bytes = getattr(media_obj, "file_size", 0)
+    formatted_size = format_size(file_size_bytes)
+
+    try:
+        await safe_edit_tracking_message(status_msg, "📂 Locating `DIRECTED UPLOADED` folder...")
+        directed_folder_id = await asyncio.to_thread(get_or_create_drive_folder, "DIRECTED UPLOADED", DRIVE_FOLDER_ID)
+    except Exception as e:
+        return await status_msg.edit_text(f"❌ **Failed to access target folder:**\n`{e}`")
+
+    local_path = os.path.join(DOWNLOADS_DIR, safe_name)
+    
+    # डाउनलोडिंग स्टेटस
+    await safe_edit_tracking_message(
+        status_msg, 
+        f"📥 **Downloading from Telegram...**\n\n📄 `{safe_name}`\n💾 **Size:** `{formatted_size}`"
+    )
+
+    try:
+        downloaded_file = await client.download_media(target_media, file_name=local_path)
+        
+        if not downloaded_file:
+            raise Exception("Telegram failed to return a valid downloaded file.")
+
+        # अपलोडिंग स्टेटस
+        await safe_edit_tracking_message(
+            status_msg, 
+            f"📤 **Uploading to Google Drive...**\n\n📄 `{safe_name}`\n💾 **Size:** `{formatted_size}`"
+        )
+
+        # अपलोड का समय मापना शुरू करें
+        upload_start_time = time.time()
+        
+        direct_link = await asyncio.to_thread(upload_to_drive, downloaded_file, safe_name, directed_folder_id)
+        
+        # अपलोड का समय मापना बंद करें
+        upload_end_time = time.time()
+        upload_duration = round(upload_end_time - upload_start_time, 2)
+        
+        # समय को सेकंड या मिनट में सेट करें
+        if upload_duration > 60:
+            time_str = f"{round(upload_duration / 60, 2)} minutes"
+        else:
+            time_str = f"{upload_duration} seconds"
+
+        # लोकल फाइल डिलीट करें
+        if os.path.exists(downloaded_file):
+            os.remove(downloaded_file)
+
+        # फाइनल रिपोर्ट
+        success_text = (
+            f"✅ **Direct Upload Successful!**\n\n"
+            f"📄 **Name:** `{safe_name}`\n"
+            f"💾 **Size:** `{formatted_size}`\n"
+            f"⏱️ **Upload Time:** `{time_str}`\n"
+            f"📂 **Folder:** `DIRECTED UPLOADED`\n"
+            f"🔗 **Drive Link:** [View Document]({direct_link})"
+        )
+        await status_msg.edit_text(success_text, disable_web_page_preview=True)
+
+    except Exception as e:
+        logger.error(f"Direct Upload Error: {e}")
+        if os.path.exists(local_path):
+            os.remove(local_path)
+            
+        await status_msg.edit_text(f"❌ **Upload Error:**\n`{e}`")
+
 
 @app.on_message(filters.command("glogin") & filters.private)
 async def glogin_cmd(client, message):
@@ -415,6 +524,250 @@ async def handle_document(client, message):
         )
         if os.path.exists(temp_path):
             os.remove(temp_path)
+import urllib.parse as urlparse
+
+# --- साइज फॉर्मेट करने का हेल्पर फंक्शन ---
+def get_formatted_size(size_bytes):
+    try:
+        size_bytes = int(size_bytes)
+        if size_bytes == 0:
+            return "0 KB"
+        # 1 MB से कम होने पर KB में
+        if size_bytes < 1024 * 1024:
+            return f"{size_bytes / 1024:.2f} KB"
+        # 1 GB से कम होने पर MB में
+        elif size_bytes < 1024 * 1024 * 1024:
+            return f"{size_bytes / (1024 * 1024):.2f} MB"
+        # 1 GB या उससे अधिक होने पर GB में
+        else:
+            return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+    except:
+        return "Unknown"
+
+# --- Drive URL से ID निकालने का फंक्शन ---
+def extract_drive_id(url):
+    try:
+        parsed = urlparse.urlparse(url)
+        return urlparse.parse_qs(parsed.query).get('id', [None])[0]
+    except:
+        return None
+
+@app.on_message(filters.command("update1") & filters.private)
+async def update_drive_files(client, message):
+    user_id = message.from_user.id
+    if user_id != ADMIN_ID:
+        return await message.reply_text("⛔ Unauthorized access.")
+
+    status_msg = await message.reply_text("⏳ **Initializing Process...**\nReading local JSON file.")
+
+    if not os.path.exists(DATA_FILE):
+        return await status_msg.edit_text(f"❌ Target file `{DATA_FILE}` not found in the root directory!")
+
+    drive_service = get_drive_service()
+    if not drive_service:
+        return await status_msg.edit_text(
+            "⚠️ **Google Drive Auth Required!**\n\n"
+            "Your session is missing or expired. Please send the `/glogin` command to authenticate and start a new session before updating files."
+        )
+
+    try:
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            full_data = json.load(f)
+    except Exception as e:
+        return await status_msg.edit_text(f"❌ Failed to parse JSON: `{e}`")
+
+    await safe_edit_tracking_message(status_msg, "🔍 Scanning JSON for documents...")
+    
+    try:
+        await status_msg.pin(disable_notification=True)
+    except Exception as e:
+        logger.warning(f"Could not pin the tracker message: {e}")
+    
+    root_node = full_data.get("data", full_data)
+    target_items = []
+    extract_all_items(root_node, target_items)
+    total_files = len(target_items)
+    
+    if total_files == 0:
+        try:
+            await status_msg.unpin()
+        except:
+            pass
+        return await status_msg.edit_text("🎉 **No files found in JSON payload!**")
+
+    try:
+        me = await client.get_me()
+        bot_username = f"@{me.username}"
+        await safe_edit_tracking_message(status_msg, f"📂 Establishing root directory for `{bot_username}` in Drive...")
+        bot_root_folder_id = await asyncio.to_thread(get_or_create_drive_folder, bot_username, DRIVE_FOLDER_ID)
+    except Exception as e:
+        return await status_msg.edit_text(f"❌ Failed to create/locate bot root folder: `{e}`")
+
+    folder_cache = {(): bot_root_folder_id}
+    seen_names_in_folders = {}
+    
+    success_count = 0
+    error_count = 0
+    skipped_count = 0
+    modified_count = 0 # डेटाबेस सेव ट्रैक करने के लिए
+
+    async def resolve_drive_path(path_tuple):
+        if path_tuple in folder_cache: 
+            return folder_cache[path_tuple]
+        parent_id = await resolve_drive_path(path_tuple[:-1])
+        current_id = await asyncio.to_thread(get_or_create_drive_folder, path_tuple[-1], parent_id)
+        folder_cache[path_tuple] = current_id
+        return current_id
+
+    for index, target in enumerate(target_items, start=1):
+        item = target["item"]
+        folder_path = target["path"]
+        folder_path_str = ' -> '.join(folder_path) if folder_path else 'Root'
+        
+        if folder_path not in seen_names_in_folders:
+            seen_names_in_folders[folder_path] = set()
+            
+        safe_original_name = sanitize_filename(item.get("name", f"Unnamed_{index}"))
+        json_file_name = safe_original_name
+        counter = 1
+        
+        while json_file_name in seen_names_in_folders[folder_path]:
+            json_file_name = f"{safe_original_name} ({counter})"
+            counter += 1
+            
+        seen_names_in_folders[folder_path].add(json_file_name)
+        upload_name = json_file_name if json_file_name.lower().endswith(".pdf") else f"{json_file_name}.pdf"
+        item["name"] = upload_name 
+        
+        # --- स्किप लॉजिक और साइज़ बैकफिल (Backfill) ---
+        if item.get("file_url") and item["file_url"].strip() != "":
+            skipped_count += 1
+            
+            # अगर पहले से अपलोड की गई फ़ाइल में साइज़ नहीं है
+            if "file_bytes" not in item or "file_size" not in item:
+                try:
+                    drive_id = extract_drive_id(item["file_url"])
+                    if drive_id:
+                        # Drive API से फ़ाइल का साइज़ प्राप्त करें
+                        file_metadata = await asyncio.to_thread(
+                            lambda: drive_service.files().get(fileId=drive_id, fields='size').execute()
+                        )
+                        fetched_size = int(file_metadata.get('size', 0))
+                        
+                        item["file_bytes"] = fetched_size
+                        item["file_size"] = get_formatted_size(fetched_size)
+                        
+                        # JSON अपडेट करें
+                        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+                            json.dump(full_data, f, ensure_ascii=False, indent=4)
+                            
+                        modified_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to fetch size for skipped file {upload_name}: {e}")
+            continue 
+
+        file_id = item.get("file_id")
+        
+        tracker_text = (
+            f"📌 **LIVE PROGRESS TRACKER**\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"📦 **Total Files:** `{total_files}`\n"
+            f"✅ **Uploaded:** `{success_count}`\n"
+            f"⏭️ **Skipped:** `{skipped_count}`\n"
+            f"❌ **Errors:** `{error_count}`\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"🔄 **Currently Processing [{index}/{total_files}]:**\n"
+            f"📄 `{upload_name}`\n"
+            f"⏳ Downloading from Telegram..."
+        )
+        await safe_edit_tracking_message(status_msg, tracker_text)
+        
+        try:
+            target_drive_folder_id = await resolve_drive_path(folder_path)
+            exact_local_path = os.path.join(DOWNLOADS_DIR, upload_name)
+            
+            # टेलीग्राम से डाउनलोड
+            local_path = await app.download_media(file_id, file_name=exact_local_path)
+            if not local_path: 
+                raise Exception("Media download returned empty path.")
+
+            # लोकल फ़ाइल का साइज़ निकालें
+            local_size_bytes = os.path.getsize(local_path)
+            item["file_bytes"] = local_size_bytes
+            item["file_size"] = get_formatted_size(local_size_bytes)
+
+            # ड्राइव पर अपलोड
+            tracker_text = tracker_text.replace("Downloading from Telegram...", "Uploading to Google Drive...")
+            await safe_edit_tracking_message(status_msg, tracker_text)
+            
+            direct_link = await asyncio.to_thread(upload_to_drive, local_path, upload_name, target_drive_folder_id)
+            
+            item["file_url"] = direct_link
+            success_count += 1
+            modified_count += 1
+            
+            # अपलोड के तुरंत बाद लोकल फाइल डिलीट करना
+            if os.path.exists(local_path): 
+                os.remove(local_path)
+            
+            # लोकल JSON अपडेट
+            with open(DATA_FILE, 'w', encoding='utf-8') as f:
+                json.dump(full_data, f, ensure_ascii=False, indent=4)
+                
+            # --- हर 5 मॉडिफाई हुई फ़ाइलों के बाद MongoDB में सेव करना (अगर कुल > 10 और Termux नहीं है) ---
+            if not is_termux and total_files > 10 and modified_count % 5 == 0:
+                try:
+                    save_data_file_to_mongo()
+                except Exception as mongo_err:
+                    logger.error(f"MongoDB periodic save failed: {mongo_err}")
+
+            individual_success_msg = (
+                f"✅ **File Successfully Processed!**\n\n"
+                f"📄 **Name:** `{upload_name}`\n"
+                f"💾 **Size:** `{item['file_size']}`\n"
+                f"📂 **Saved Path:** `{folder_path_str}`\n"
+                f"🆔 **File ID:** `{file_id}`\n"
+                f"🔗 **Drive Link:** [View Document]({direct_link})"
+            )
+            await message.reply_text(individual_success_msg, disable_web_page_preview=True)
+            
+            await asyncio.sleep(1)
+            
+        except Exception as e:
+            error_count += 1
+            logger.error(f"Failed processing '{upload_name}': {e}")
+            
+            error_msg = (
+                f"❌ **Failed to Process File!**\n\n"
+                f"📄 **Name:** `{upload_name}`\n"
+                f"📂 **Path:** `{folder_path_str}`\n"
+                f"⚠️ **Error:** `{e}`"
+            )
+            await message.reply_text(error_msg)
+            await asyncio.sleep(2)
+
+    # अंतिम रिपोर्ट और MongoDB फाइनल सेव
+    if not is_termux:
+        try:
+            save_data_file_to_mongo()
+        except Exception as mongo_err:
+            logger.error(f"MongoDB final save failed: {mongo_err}")
+            
+    final_report = (
+        f"🏁 **Execution Completed!**\n\n"
+        f"📁 **Base Folder:** `{bot_username}`\n"
+        f"💾 **JSON Updated:** `bot_data.json`\n\n"
+        f"📊 **Final Statistics:**\n"
+        f"✅ New Uploads: `{success_count}`\n"
+        f"⏭️ Skipped: `{skipped_count}`\n"
+        f"❌ Failed: `{error_count}`\n"
+    )
+    await safe_edit_tracking_message(status_msg, final_report)
+    
+    try:
+        await status_msg.unpin()
+    except:
+        pass
 
 @app.on_message(filters.private & filters.text & StatusFilter("getting_url_for_drive"))
 async def handle_auth_response(client, message):
@@ -468,179 +821,6 @@ async def handle_auth_response(client, message):
             f"❌ **Authentication Failed:**\n`{e}`\n\n"
             "Please ensure you copied the ENTIRE URL correctly, or upload `client_secrets.json` to generate a new link."
         )
-@app.on_message(filters.command("update1") & filters.private)
-async def update_drive_files(client, message):
-    user_id = message.from_user.id
-    if user_id != ADMIN_ID:
-        return await message.reply_text("⛔ Unauthorized access.")
-
-    status_msg = await message.reply_text("⏳ **Initializing Process...**\nReading local JSON file.")
-
-    if not os.path.exists(DATA_FILE):
-        return await status_msg.edit_text(f"❌ Target file `{DATA_FILE}` not found in the root directory!")
-
-    # 1. गूगल ड्राइव ऑथेंटिकेशन चेक - लॉग इन न होने पर /glogin के लिए प्रॉम्प्ट
-    if not get_drive_service():
-        return await status_msg.edit_text(
-            "⚠️ **Google Drive Auth Required!**\n\n"
-            "Your session is missing or expired. Please send the `/glogin` command to authenticate and start a new session before updating files."
-        )
-
-    try:
-        with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            full_data = json.load(f)
-    except Exception as e:
-        return await status_msg.edit_text(f"❌ Failed to parse JSON: `{e}`")
-
-    await safe_edit_tracking_message(status_msg, "🔍 Scanning JSON for documents...")
-    
-    # प्रोग्रेस ट्रैकर मैसेज को पिन करना
-    try:
-        await status_msg.pin(disable_notification=True)
-    except Exception as e:
-        logger.warning(f"Could not pin the tracker message: {e}")
-    
-    root_node = full_data.get("data", full_data)
-    target_items = []
-    extract_all_items(root_node, target_items)
-    total_files = len(target_items)
-    
-    if total_files == 0:
-        try:
-            await status_msg.unpin()
-        except:
-            pass
-        return await status_msg.edit_text("🎉 **No files found in JSON payload!**")
-
-    try:
-        me = await client.get_me()
-        bot_username = f"@{me.username}"
-        await safe_edit_tracking_message(status_msg, f"📂 Establishing root directory for `{bot_username}` in Drive...")
-        bot_root_folder_id = await asyncio.to_thread(get_or_create_drive_folder, bot_username, DRIVE_FOLDER_ID)
-    except Exception as e:
-        return await status_msg.edit_text(f"❌ Failed to create/locate bot root folder: `{e}`")
-
-    folder_cache = {(): bot_root_folder_id}
-    seen_names_in_folders = {}
-    success_count, error_count, skipped_count = 0, 0, 0
-
-    async def resolve_drive_path(path_tuple):
-        if path_tuple in folder_cache: 
-            return folder_cache[path_tuple]
-        parent_id = await resolve_drive_path(path_tuple[:-1])
-        current_id = await asyncio.to_thread(get_or_create_drive_folder, path_tuple[-1], parent_id)
-        folder_cache[path_tuple] = current_id
-        return current_id
-
-    for index, target in enumerate(target_items, start=1):
-        item = target["item"]
-        folder_path = target["path"]
-        folder_path_str = ' -> '.join(folder_path) if folder_path else 'Root'
-        
-        if folder_path not in seen_names_in_folders:
-            seen_names_in_folders[folder_path] = set()
-            
-        safe_original_name = sanitize_filename(item.get("name", f"Unnamed_{index}"))
-        json_file_name = safe_original_name
-        counter = 1
-        
-        while json_file_name in seen_names_in_folders[folder_path]:
-            json_file_name = f"{safe_original_name} ({counter})"
-            counter += 1
-            
-        seen_names_in_folders[folder_path].add(json_file_name)
-        upload_name = json_file_name if json_file_name.lower().endswith(".pdf") else f"{json_file_name}.pdf"
-        item["name"] = upload_name 
-        
-        # स्किप लॉजिक
-        if item.get("file_url") and item["file_url"].strip() != "":
-            skipped_count += 1
-            continue 
-
-        file_id = item.get("file_id")
-        
-        # पिन किए गए मैसेज को अपडेट करना (डैशबोर्ड की तरह)
-        tracker_text = (
-            f"📌 **LIVE PROGRESS TRACKER**\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"📦 **Total Files:** `{total_files}`\n"
-            f"✅ **Uploaded:** `{success_count}`\n"
-            f"⏭️ **Skipped:** `{skipped_count}`\n"
-            f"❌ **Errors:** `{error_count}`\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"🔄 **Currently Processing [{index}/{total_files}]:**\n"
-            f"📄 `{upload_name}`\n"
-            f"⏳ Downloading from Telegram..."
-        )
-        await safe_edit_tracking_message(status_msg, tracker_text)
-        
-        try:
-            target_drive_folder_id = await resolve_drive_path(folder_path)
-            exact_local_path = os.path.join(DOWNLOADS_DIR, upload_name)
-            
-            # टेलीग्राम से डाउनलोड
-            local_path = await app.download_media(file_id, file_name=exact_local_path)
-            if not local_path: 
-                raise Exception("Media download returned empty path.")
-
-            # ड्राइव पर अपलोड
-            tracker_text = tracker_text.replace("Downloading from Telegram...", "Uploading to Google Drive...")
-            await safe_edit_tracking_message(status_msg, tracker_text)
-            
-            direct_link = await asyncio.to_thread(upload_to_drive, local_path, upload_name, target_drive_folder_id)
-            
-            item["file_url"] = direct_link
-            success_count += 1
-            
-            # अपलोड के तुरंत बाद लोकल फाइल डिलीट करना
-            if os.path.exists(local_path): 
-                os.remove(local_path)
-            
-            with open(DATA_FILE, 'w', encoding='utf-8') as f:
-                json.dump(full_data, f, ensure_ascii=False, indent=4)
-                
-            # हर सफल अपलोड के लिए यूज़र को अलग से पूरी जानकारी भेजना
-            individual_success_msg = (
-                f"✅ **File Successfully Processed!**\n\n"
-                f"📄 **Name:** `{upload_name}`\n"
-                f"📂 **Saved Path:** `{folder_path_str}`\n"
-                f"🆔 **File ID:** `{file_id}`\n"
-                f"🔗 **Drive Link:** [View Document]({direct_link})"
-            )
-            await message.reply_text(individual_success_msg, disable_web_page_preview=True)
-            
-            await asyncio.sleep(1) # थोड़ा विराम
-            
-        except Exception as e:
-            error_count += 1
-            logger.error(f"Failed processing '{upload_name}': {e}")
-            
-            # एरर आने पर भी अलग से मैसेज भेजना
-            error_msg = (
-                f"❌ **Failed to Process File!**\n\n"
-                f"📄 **Name:** `{upload_name}`\n"
-                f"📂 **Path:** `{folder_path_str}`\n"
-                f"⚠️ **Error:** `{e}`"
-            )
-            await message.reply_text(error_msg)
-            await asyncio.sleep(2)
-
-    # अंतिम रिपोर्ट और पिन हटाना
-    final_report = (
-        f"🏁 **Execution Completed!**\n\n"
-        f"📁 **Base Folder:** `{bot_username}`\n"
-        f"💾 **JSON Updated:** `bot_data.json`\n\n"
-        f"📊 **Final Statistics:**\n"
-        f"✅ New Uploads: `{success_count}`\n"
-        f"⏭️ Skipped: `{skipped_count}`\n"
-        f"❌ Failed: `{error_count}`\n"
-    )
-    await safe_edit_tracking_message(status_msg, final_report)
-    
-    try:
-        await status_msg.unpin()
-    except:
-        pass
 
 def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
     try:
