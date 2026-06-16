@@ -508,7 +508,7 @@ async def handle_document(client, message):
                     "3. The page will redirect and show an error (e.g., 'localhost refused to connect'). This is normal!\n"
                     "4. Copy the ENTIRE URL from your browser's address bar and send it back to me here.",
                     disable_web_page_preview=True
-                )
+                ) 
             except Exception as e:
                 logger.error(f"Auth link generation error: {e}")
                 await status_msg.edit_text(
