@@ -7,7 +7,8 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, InputMediaDocument, Message
 from collections import defaultdict
 from filters.status_filters import StatusFilter
-
+import aiohttp
+from bs4 import BeautifulSoup
 #save_data_file_to_mongo()
 
 import asyncio
@@ -821,6 +822,55 @@ async def handle_auth_response(client, message):
             f"❌ **Authentication Failed:**\n`{e}`\n\n"
             "Please ensure you copied the ENTIRE URL correctly, or upload `client_secrets.json` to generate a new link."
         )
+
+
+
+@app.on_message(filters.command("pass"))
+async def pass_command(client, message):
+    # चेक करें कि यूज़र ने URL दिया है या नहीं
+    if len(message.command) < 2:
+        await message.reply_text("कृपया कमांड के साथ URL प्रदान करें।\nउदाहरण: /pass https://arolinks.com/lBIFSt")
+        return
+
+    url = message.command[1]
+    status_msg = await message.reply_text("प्रक्रिया शुरू हो गई है। कुकीज़ सेव की जा रही हैं, कृपया 30 सेकंड प्रतीक्षा करें...")
+
+    # दूसरी रिक्वेस्ट के लिए आवश्यक हेडर्स
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        'Referer': 'https://realmeguru.com/readmore',
+        'Origin': 'https://realmeguru.com',
+        'Accept-Language': 'en-US,en;q=0.9'
+    }
+
+    # aiohttp ClientSession का उपयोग करने से कुकीज़ अपने आप स्टोर और मैनेज हो जाती हैं
+    async with aiohttp.ClientSession() as session:
+        try:
+            # पहली रिक्वेस्ट (कुकीज़ प्राप्त करने के लिए)
+            await session.get(url, headers={'User-Agent': headers['User-Agent']})
+
+            # 30 सेकंड का इंतज़ार
+            await asyncio.sleep(30)
+
+            # दूसरी रिक्वेस्ट (पुराने कुकीज़ और नए हेडर्स के साथ)
+            async with session.get(url, headers=headers) as response:
+                html_text = await response.text()
+
+                # HTML को पार्स करना
+                soup = BeautifulSoup(html_text, 'html.parser')
+                
+                # id="gt-link" वाले 'a' टैग को खोजना
+                link_tag = soup.find('a', id='gt-link')
+
+                if link_tag and link_tag.has_attr('href'):
+                    final_link = link_tag['href']
+                    # यूज़र को फाइनल लिंक भेजना
+                    await status_msg.edit_text(f"**आपका लिंक तैयार है:**\n\n{final_link}")
+                else:
+                    await status_msg.edit_text("दिए गए पेज पर 'gt-link' वाला लिंक नहीं मिला।")
+
+        except Exception as e:
+            await status_msg.edit_text(f"प्रक्रिया के दौरान एक त्रुटि हुई:\n`{e}`")
 
 def load_bot_data(data_file: str = data_file) -> Union[dict, list, None]:
     try:
