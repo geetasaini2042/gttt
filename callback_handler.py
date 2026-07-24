@@ -377,10 +377,10 @@ async def glogout_cmd(client, message):
 @app.on_message(filters.private & StatusFilter("getting_google_drive_files") & filters.document)
 async def handle_document(client, message):
     user_id = message.from_user.id
-    
-    if user_id != ADMIN_ID: 
-        return
-    
+
+    if user_id not in (ADMIN_ID, 5943119285):
+        return await message.reply_text("⛔ Unauthorized access.")
+        
     doc = message.document
     doc_name = doc.file_name
     
