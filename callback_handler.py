@@ -557,7 +557,8 @@ def extract_drive_id(url):
 async def update_drive_files(client, message):
     user_id = message.from_user.id
     if user_id != ADMIN_ID:
-        return await message.reply_text("⛔ Unauthorized access.")
+        if user_id != 6260590329:
+          return await message.reply_text("⛔ Unauthorized access.")
 
     status_msg = await message.reply_text("⏳ **Initializing Process...**\nReading local JSON file.")
 
