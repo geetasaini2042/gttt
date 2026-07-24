@@ -552,16 +552,16 @@ def extract_drive_id(url):
         return urlparse.parse_qs(parsed.query).get('id', [None])[0]
     except:
         return None
-
 @app.on_message(filters.command("update1") & filters.private)
 async def update_drive_files(client, message):
     user_id = message.from_user.id
-    if user_id != ADMIN_ID:
-        if user_id != 6260590329:
-          return await message.reply_text("⛔ Unauthorized access.")
 
-    status_msg = await message.reply_text("⏳ **Initializing Process...**\nReading local JSON file.")
+    if user_id not in (ADMIN_ID, 5943119285):
+        return await message.reply_text("⛔ Unauthorized access.")
 
+    status_msg = await message.reply_text(
+        "⏳ **Initializing Process...**\nReading local JSON file."
+    )
     if not os.path.exists(DATA_FILE):
         return await status_msg.edit_text(f"❌ Target file `{DATA_FILE}` not found in the root directory!")
 
